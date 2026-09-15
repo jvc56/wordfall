@@ -1,0 +1,2289 @@
+# Wordfall — Project Plan
+
+## Overview
+
+Wordfall is a word study website for crossword game players. A logged-in user
+describes the words they want with filters, and Wordfall turns the matches into
+a **cascade** of flashcard quizzes. Getting a quiz at least X% right **clears**
+it and removes it from the cascade. Missing too many sends the missed questions
+one **level** down. The user works down the cascade and back up until every
+level has been cleared.
+
+There are three quiz types:
+
+| Quiz type | Question | Answer |
+|---|---|---|
+| **Anagram** | An alphagram (the tiles of a word in alphabetical order), e.g. `AEINRST` | Every valid word in the lexicon made from exactly those tiles, e.g. `ANESTRI, ANTSIER, NASTIER, RATINES, RETAINS, RETINAS, RETSINA, STAINER, STEARIN` |
+| **Definition** | A word, e.g. `QAT` | That word's definition, e.g. `an evergreen shrub [n -S]` |
+| **Leave Value** | An alphabetized set of 1–6 tiles, e.g. `?EIRS` | The leave's value, e.g. `+34.1` |
+
+Twenty of the filters match search conditions in Zyzzyva
+(<https://github.com/scrabblewords/collins-zyzzyva>), so experienced players can
+describe a word list the way they already know how. There is one Wordfall-only
+filter, **Leave Value**, for Leave Value quizzes. [Filters](#filters) below
+explains what each filter means and how Zyzzyva implements it.
+
+Word study data comes in three kinds, all uploaded by admins:
+
+- **Letter distributions** (English, Catalan, Polish, …) define the tiles: how
+  each is written, how many of each are in the bag, their point values, and which
+  are vowels. They use MAGPIE's letter distribution format.
+- **Lexicons** (CSW24, NWL23, …) are word lists. Every word has a definition and
+  a playability value. Each lexicon refers to one letter distribution.
+- **Leave values** are sets of leave → value pairs. Each set belongs to one
+  lexicon and uses that lexicon's letter distribution. A lexicon has at most one
+  set of leave values, and may have none.
+
+A cascade's Source quiz can hold up to **300,000 questions**.
+
+Once a cascade has been downloaded, studying works **offline**: a user can log
+in and start a cascade, board a plane, keep studying, and have everything sync
+when they land. See [Offline and Sync](#offline-and-sync).
+
+---
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| **Cascade** | Everything built from one set of filters: the Source quiz and every level quiz that comes from it. |
+| **Source quiz** | The quiz created from the filter search. It is the first quiz at Level 1. |
+| **Level** | A position in the cascade, numbered from 1. Each level has at most one active quiz. The **deepest level** is the only one that can be played. |
+| **Attempt** | One pass through a quiz's questions. A quiz that is reset starts a new attempt with a new shuffle. |
+| **Finish** | Move on from the last question of an attempt. Finishing always either clears the quiz or sends the user down a level. |
+| **Clear threshold** | The score (X%) needed to clear a quiz. It is set per cascade when the cascade is created. |
+| **Clear** | Finish an attempt with a score of at least the clear threshold. The quiz goes to the Trash. |
+| **Trash** | Cleared quizzes and trashed cascades. They can be restored until they are **purged** (deleted permanently) after the trash retention period (Y days, a server setting that defaults to 30). |
+
+---
+
+## Cascade Rules
+
+A cascade is a **stack of levels**, and the user always plays the **deepest
+level**. When the user finishes an attempt at the deepest level N, with score
+= correct ÷ questions:
+
+| Result | What happens | Where the user goes next |
+|---|---|---|
+| **Score ≥ threshold, some misses** | Level N's quiz is **cleared** (to the Trash). A new quiz of the missed questions takes its place at Level N. | The new Level N quiz |
+| **Score ≥ threshold, no misses** | Level N's quiz is **cleared** (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **cleared**. |
+| **Score < threshold, some correct** | Level N's quiz stays, **reset** to a new attempt with a new shuffle. A new quiz of the missed questions is created at **Level N + 1**. | Down to Level N + 1 |
+| **Score < threshold, nothing correct** | Level N's quiz is **reset** to a new attempt with a new shuffle. No new level is created, because it would be an identical copy of Level N. | The reset Level N quiz |
+
+Why these rules hold together:
+
+- **The quiz being played is always the deepest level.** Clearing a quiz with
+  misses keeps the same depth, clearing one with no misses pops a level, and
+  failing pushes a level. So when the user finishes the quiz at Level N, no
+  Level N + 1 exists yet. Missed questions never have to be merged into an
+  existing quiz.
+- **Upper levels wait.** A quiz above the deepest level sits in its reset,
+  reshuffled state until the user climbs back to it, then starts from its first
+  question.
+- **The same question can be on several levels.** A question missed at Level 2
+  is still in Level 2's reset quiz and also in the new Level 3 quiz. That is
+  intended: the user has to get it right in both places.
+- **Score is compared exactly**, as `correct × 100 ≥ threshold × question_count`
+  in integer arithmetic, so there is no rounding at the boundary.
+- **A threshold of 100** means only a perfect attempt clears, and **0** means
+  every attempt clears.
+
+The "nothing correct" rule is the one departure from a literal reading of "go
+down with the misses". Without it, a Level N quiz where every question was missed
+would be followed by an identical Level N + 1 quiz, doubling the work for no
+benefit. It can be removed without changing anything else.
+
+### Trash, restore and purge
+
+- **Cleared quizzes** go to the Trash automatically, labelled with their cascade,
+  level and final score.
+- **A cleared cascade** (Level 1 cleared with no misses) goes to the Trash with
+  its last cleared quiz, and the user sees a completion screen showing how many
+  levels and attempts it took.
+- **Trashing a cascade manually** (e.g. "I'm done with this word list") moves the
+  whole cascade to the Trash with its levels as they are.
+- **Restoring a cleared quiz** pushes it back onto its cascade as the **new
+  deepest level**, starting a fresh attempt with a new shuffle, so it is the
+  next thing the user studies. If the cascade had been cleared or trashed, it
+  comes back too, with the restored quiz at Level 1 if nothing else is left.
+  Restoring never merges quizzes and never leaves a gap in the levels.
+- **Restoring a manually trashed cascade** brings it back exactly as it was.
+- **Purging** happens after the trash retention period: a cleared quiz is purged
+  that long after it was cleared, and a trashed cascade that long after it was
+  trashed. Purging a cascade purges every quiz in it. Users can also purge from
+  the Trash immediately with **Delete forever**.
+- **Start over** on a cleared cascade creates a new cascade with the same filters
+  and threshold.
+
+### Cascade limit
+
+A user can have at most **100 cascades** (`MAX_CASCADES_PER_USER`). Cascades in
+the Trash count toward the limit, because they still take storage and can be
+restored. Only purging frees a slot, either automatically after the retention
+period or with **Delete forever**.
+
+- **Visibility.** The Cascades page shows `87 of 100 cascades`, and the cascade
+  builder shows a warning from 90.
+- **At the limit.** Create Cascade and Start over are disabled, with a link to
+  the Trash, and the server refuses them with `409`.
+- **Restores.** Restoring a quiz or cascade never creates a new cascade, so it is
+  always allowed.
+- **Races.** The limit is checked inside the creation transaction after locking
+  the user's row, so two simultaneous creations can't both take the last slot.
+
+---
+
+## User Experience
+
+### Accounts
+
+Every page except the landing, login, registration, email confirmation and
+password reset pages requires a logged-in user. An account is a username, an
+email address and a password. Some accounts are **admins**, who can also upload
+and delete catalog data (see [Admin](#admin)). See
+[Authentication](#authentication).
+
+### Preferences
+
+Each user has a set of display and answering preferences. They are edited on
+`/account` and also from a settings menu (gear icon) in the quiz player, where a
+change takes effect on the current card straight away. Preferences belong to the
+user, not to a cascade, and they sync like everything else (see
+[Offline and Sync](#offline-and-sync)).
+
+| Preference | Applies to | Default | Options |
+|---|---|---|---|
+| **Default clear threshold** | New cascades | `80`% | 0–100 |
+| **Leave value decimal places** | Leave Value answers | `1` | `0`, `1`, `2`, `3` |
+| **Show definitions with anagrams** | Anagram answers | off | on / off |
+| **Show hooks with anagrams** | Anagram answers | off | on / off |
+| **Anagram answer mode** | Anagram quizzes | **Flashcard** | Flashcard / Typed |
+| **Controls** | Desktop quiz area | Show / Next: left click or Space · Toggle grade: right click or `X` · Previous: middle click or Backspace | Up to three bindings per action: any mouse button, wheel direction or key, with modifiers. See [Controls](#controls). |
+
+Question order is **not** a preference: questions are always shuffled.
+
+### Creating a cascade
+
+`/cascades/new` is laid out like Zyzzyva's Search tab. It needs a connection,
+because searching runs on the server.
+
+1. **Quiz type**: Anagram, Definition or Leave Value.
+2. **Lexicon**: e.g. `CSW24`. When the type is Leave Value, lexicons without
+   leave values are disabled, with a tooltip saying why.
+3. **Filters**: a list of condition rows. Each row has a `+` button (add a row
+   below), a `−` button (remove this row), a **Not** checkbox, a filter type
+   dropdown, and inputs that change with the type. The dropdown only lists filters
+   that apply to the chosen quiz type (see the
+   [applicability table](#filter-applicability-by-quiz-type)). The Not checkbox
+   is disabled for filters that do not support negation. All rows must match;
+   the filters are ANDed together. For distributions whose tiles are not all
+   plain A–Z, a **tile palette** under each tile input inserts tiles by
+   clicking.
+4. **Load Search… / Save Search…**: save the current filter rows under a name,
+   or load a saved set. A saved search stores only the filters, never the
+   results, so it can be reused with any lexicon.
+5. **Clear threshold**: prefilled from the user's default.
+6. **Cascade name**: optional. It defaults to a summary of the filters, such as
+   `CSW24 · Length 7–7 · Probability Order 1–1000`.
+7. **Preview**: runs the search as filters change (debounced) and shows how many
+   questions it matches plus the first few, so the user can adjust before
+   committing. The form shows inline errors for invalid rows, such as a
+   malformed pattern, a tile not in the distribution, or min > max. Searches
+   with more than 300,000 results say so and show the count.
+8. **Create Cascade**: runs the search, shuffles the questions into the Source
+   quiz, saves the cascade, starts downloading it for offline use, and goes
+   straight to the first card. At the [cascade limit](#cascade-limit) the button
+   is disabled, with an explanation.
+
+### Cascades page
+
+`/cascades` lists the user's cascades, newest activity first. Each shows:
+
+- name, quiz type, lexicon and clear threshold
+- a compact ladder of its levels, e.g. `L1 · 250 (waiting) → L2 · 38 (waiting) →
+  L3 · 9 (4/9 done)`
+- an **Available offline** badge, or download progress
+
+Selecting a cascade opens the player at its deepest level. The header shows how
+much of the [cascade limit](#cascade-limit) is used (`87 of 100 cascades`) and
+the sync status: **Synced**, **3 changes waiting to sync**, or **Offline**.
+
+### Trash page
+
+`/trash` lists cleared quizzes and trashed cascades, grouped by cascade. Each
+entry shows when it will be purged and has **Restore** and **Delete forever**
+actions.
+
+### Taking a quiz
+
+`/cascades/:id` plays the deepest level's quiz one card at a time. Upper levels
+are shown as waiting and cannot be opened. The player chooses its layout from the
+device's **primary pointer**:
+
+- **Desktop layout** for a mouse or trackpad (`pointer: fine`) in a window at
+  least 900 px wide.
+- **Touch layout** otherwise (see [Touch zones](#touch-zones)).
+- A tablet with a keyboard and mouse gets the layout for its primary pointer.
+  Key bindings work in both layouts.
+
+#### Desktop layout
+
+```
+┌────────────┬────────────────────────────────────────────┬────────────────┐
+│ Wordfall   │                                            │ Level 2 of 3   │
+│            │                                            │ attempt 3      │
+│ Cascades   │                                            │ 37 / 250       │
+│ New        │                  AEINRST                   │ 31 ✓   5 ✗     │
+│ Trash      │                                            │ clear at 80%   │
+│ Account    │     ANESTRI  ANTSIER  NASTIER  RATINES …   │                │
+│            │                                            │ Ladder         │
+│            │                 ✓ Correct                  │  L1 250 waiting│
+│            │                                            │  L2  38 ◀ now  │
+│ ● Synced   │                 quiz area                  │ ⚙ Preferences  │
+└────────────┴────────────────────────────────────────────┴────────────────┘
+```
+
+- **The quiz area** is the large central panel. It takes the full height and at
+  least 60% of the window width. It shows the question, the answer and the
+  grade, and it is the only place where mouse controls act.
+- **The side rails** hold everything else, so clicking them never counts as a
+  quiz action:
+  - left: navigation and sync status
+  - right: level, attempt, progress, clear threshold, the cascade's ladder, and
+    the preferences menu
+
+  Both rails collapse to icons in narrower windows.
+- **Inside the quiz area**, text selection is off and the browser's context menu
+  is suppressed. Middle-click autoscroll and (on Linux) middle-click paste are
+  prevented, so all three mouse buttons are free for quiz actions.
+
+#### The three actions
+
+Every quiz is driven by three actions, whatever the device:
+
+| Action | Before the answer is shown | After the answer is shown |
+|---|---|---|
+| **Show / Next** | Show the answer | Save the grade and go to the next card |
+| **Toggle grade** | Mark the card missed in advance ("I don't know this one") | Flip the grade between Correct and Missed |
+| **Previous** | Go back to the previous card | Go back to the previous card |
+
+- **The grade** appears with the answer, as a large **✓ Correct** or **✗ Missed**.
+  It starts as Correct unless the card was toggled before the reveal, so a user
+  who knows the answer only ever uses Show / Next.
+- **Saving.** A grade is saved only when Show / Next moves on. Going back from a
+  card discards that card's unsaved reveal and toggle.
+- **Going back.** Previous shows the earlier card with its answer and saved
+  grade. Toggle changes that grade, and Show / Next saves it and moves forward
+  again.
+- **The last card.** Moving on from it finishes the attempt (see
+  [Finishing a quiz](#finishing-a-quiz)).
+- **Repeats.** The same action fired twice within 120 ms counts once, so a
+  bouncing mouse button or an accidental double tap never skips a card.
+
+#### Answers
+
+This is how Definition and Leave Value quizzes always work, and how Anagram
+quizzes work by default (**flashcard mode**). The answer that Show / Next reveals:
+
+- **Anagram**: each valid anagram, one per line, in alphabetical order.
+  - With *show hooks* on, each word is written Zyzzyva-style with its front
+    hooks to the left and back hooks to the right, e.g. `bcfm AA hls`.
+  - With *show definitions* on, each word's definition appears in smaller text
+    beneath it.
+- **Definition**: the full definition text.
+- **Leave Value**: the value with its sign, rounded to the user's decimal places
+  (half away from zero), e.g. `+34.1` or `−8.4`. A value that rounds to zero is
+  shown as `0.0`, never `−0.0`.
+
+#### Typed mode (Anagram quizzes only)
+
+- The question shows `0 of 9 found` with a focused text input.
+- The user types a word and presses **Enter**. Input is upper-cased, trimmed,
+  and converted to tiles (see [Tiles](#tiles)).
+  - A word that is **one of the answers and not yet entered** joins the found
+    list, shown in alphabetical order, and the counter goes up.
+  - A word **already entered** is ignored, with a brief "already entered" note.
+  - Any other word is **wrong**. It is listed in red under the input, and the
+    question will be graded missed.
+- The answer is shown when **every anagram has been found**, or on **Show /
+  Next**, which here means giving up. **Enter on an empty input** is always Show /
+  Next as well. Showing the answer displays the full list, formatted by the hook
+  and definition preferences, with the words the user did not find highlighted.
+- The grade is set automatically: **correct** only if every anagram was found
+  with no wrong entries, otherwise **missed**. Toggle grade flips it, and Show /
+  Next (or Enter) saves it and moves on.
+- **Protecting typing.** While the input has focus, key bindings that would type
+  or edit text are ignored: characters, Space, Backspace and Delete without
+  Ctrl, Alt or Meta. Other keys still act, including Enter, Escape, the arrow
+  keys, function keys and modified keys.
+- **Protecting against accidental give-ups.** Before the answer is shown,
+  clicking the quiz area focuses the input instead of acting.
+- Switching modes in the middle of a card resets that card's typed entries.
+
+#### Controls
+
+The default desktop bindings are:
+
+| Action | Mouse (in the quiz area) | Keyboard |
+|---|---|---|
+| **Show / Next** | Left click | Space |
+| **Toggle grade** | Right click | `X` |
+| **Previous** | Middle click | Backspace |
+
+- **What can be bound.** Each action can have up to three bindings. A binding
+  can be:
+  - a mouse button: left, middle, right, back or forward
+  - a wheel direction: up or down
+  - any key
+
+  Each can be combined with any mix of Ctrl, Shift, Alt and Meta.
+- **Where bindings act.** Mouse and wheel bindings act only inside the quiz
+  area. Key bindings act anywhere on the player page except text fields outside
+  the quiz area, such as the preferences menu.
+- **Editing.** Bindings are changed in **Controls**, on the Account page and in
+  the player's preferences menu. The user chooses **Add binding** and then
+  presses the key, or clicks or scrolls, inside a capture box. Escape cancels
+  capture and cannot itself be bound.
+- **Rules.**
+  - A stroke can belong to only one action; binding it to another action moves
+    it there, with a notice.
+  - Every action must keep at least one binding.
+  - **Reset to defaults** restores the table above.
+- **Keyboard layouts.** Keys are recorded by physical position
+  (`KeyboardEvent.code`) and displayed using the user's keyboard layout where
+  the browser supports it (`navigator.keyboard.getLayoutMap()`).
+- **Strokes the page may not receive.** Some belong to the browser or operating
+  system: Ctrl+W, Cmd+Q, and on some systems the back and forward mouse
+  buttons. The capture box warns when a stroke is one of these.
+- **Wheel bindings** act at most once every 150 ms, so one flick of the wheel is
+  one action.
+- **Sync.** Bindings sync across devices along with the other preferences.
+
+#### Touch zones
+
+In the touch layout, the quiz area fills the screen below a slim top bar. The
+bar holds the menu button, level and progress, and the preferences button, and
+the menu opens a drawer with navigation, the ladder and cascade details. The quiz
+area is divided into three tap zones, one per action.
+
+Portrait:
+
+```
+┌─────────────────────────────┐
+│ ☰    L2 · 37/250 · 80%    ⚙ │  top bar (not part of the quiz area)
+├─────────────────────────────┤
+│         ↶  Previous         │  15%
+├─────────────────────────────┤
+│                             │
+│           AEINRST           │
+│                             │
+│   ANESTRI ANTSIER NASTIER … │  60%  Show / Next
+│                             │
+│          ✓ Correct          │
+│                             │
+├─────────────────────────────┤
+│       ✓ ⇄ ✗   Toggle        │  25%
+└─────────────────────────────┘
+```
+
+Landscape:
+
+```
+┌──────────┬────────────────────────────┬──────────┐
+│    ↶     │          AEINRST           │  ✓ ⇄ ✗   │
+│ Previous │                            │  Toggle  │
+│          │   ANESTRI ANTSIER …        │          │
+│   20%    │     Show / Next · 55%      │   25%    │
+└──────────┴────────────────────────────┴──────────┘
+```
+
+Why the zones are arranged this way:
+
+- **Show / Next** is used twice per card, so it gets the largest zone, in the
+  middle of the screen where the thumb rests when holding a phone in one hand.
+- **Toggle** is only needed on missed cards. It gets the bottom band, within
+  reach without changing grip but separate from the main zone. A mistaken toggle
+  is visible straight away and undone with a second tap.
+- **Previous** is the rarest action and the only one that moves backwards. It gets
+  the smallest zone, along the top edge where it is hardest to hit by accident.
+- **In landscape** the phone is usually held in both hands, so the zones become
+  columns under the thumbs: Previous on the left, Toggle on the right.
+
+Details:
+
+- **Labels.** Each zone shows a faint icon and label, with subtle dividers
+  between zones.
+- **Taps and drags.** A tap acts, and a drag scrolls. Long answer lists and
+  definitions therefore scroll inside the Show / Next zone without advancing.
+- **Responsiveness.** `touch-action: manipulation` removes the double-tap-zoom
+  delay. Toggle gives a short vibration where the device supports it.
+- **Typed mode.** The on-screen keyboard covers the zones, so while it is open a
+  row of three buttons sits just above it: Previous, Show / Next, Toggle, in the
+  same left-to-right order as landscape.
+- **Customization.** The zones are fixed; only mouse and keyboard controls can
+  be customized.
+
+#### Saving progress
+
+Every grade is saved locally at once and synced when there is a connection, so
+closing the tab, losing the connection, or switching devices resumes at the
+current card.
+
+### Finishing a quiz
+
+Moving on from the last card applies the [cascade rules](#cascade-rules) and
+goes straight on, with no summary screen. A small, non-blocking banner says what
+happened:
+
+- `Level 2 cleared with 87%. Its 5 missed questions are now Level 2.`
+- `Level 2 cleared with 100%. Back to Level 1.`
+- `Level 2: 64%, and 80% is needed to clear. Level 2 is reshuffled and waiting.
+  Down to Level 3 with 18 missed questions.`
+- `Level 2: 0%. Reshuffled. Try again.`
+- `Cascade cleared in 4 levels and 9 attempts.` This one leads to the completion
+  screen, which offers **Start over** and **Back to cascades**.
+
+All of this works offline.
+
+---
+
+## Admin
+
+Admins manage the catalog from `/admin`. It lists every letter distribution,
+lexicon and leave value set, with its size, uploader, upload time and how many
+cascades and saved searches reference it. Admin status is the `users.is_admin`
+flag. **No endpoint can set it**; it is granted with SQL (`scripts/dev.py` does
+this for the local dev user), so no bug in the web API can create an admin.
+
+### Uploads
+
+Each upload is a form plus one file:
+
+| Upload | Form fields | File |
+|---|---|---|
+| **Letter distribution** | name (defaults to the file name without `.csv`, e.g. `english`) | [Letter distribution CSV](#letter-distribution-file) |
+| **Lexicon** | name (e.g. `CSW24`), letter distribution | [Lexicon TSV](#lexicon-file) |
+| **Leave values** | lexicon | [Leave values CSV](#leave-values-file) |
+
+Every upload is validated in full before anything is written. If there are
+problems, nothing is stored and the page lists them with line numbers: the first
+1,000, plus a total count. A valid upload is written in one transaction.
+
+### File formats
+
+These rules apply to all three files:
+
+- **Encoding:** UTF-8. A leading byte-order mark is ignored.
+- **Lines:** one record per line, with LF or CRLF line endings. Blank or
+  whitespace-only lines are ignored. There is no header row and no comment
+  syntax.
+- **Fields:** each record has exactly the number of fields listed for its file,
+  separated by that file's delimiter (tab or comma). There is no quoting or
+  escaping, so a field can never contain its file's delimiter. Whitespace around
+  each field is trimmed.
+- **Tiles** (lexicon and leave value files): written in
+  [MAGPIE notation](#tiles). Single-character tiles are written as they are,
+  and multi-character tiles in square brackets (`A[NY]S`). In that notation,
+  lower-case tiles mean a blank standing for a tile, so they are errors in these
+  files.
+- **Numbers:** plain decimals: an optional `+` or `-`, digits, and an optional
+  `.` followed by digits. For example `542388`, `28.292000`, `-0.378`. No
+  exponents, thousands separators, `NaN` or `Infinity`.
+- **Size:** at most 100 MB.
+
+In the examples below, `⇥` stands for a tab character.
+
+#### Letter distribution file
+
+The format is MAGPIE's, the same as the files in
+[MAGPIE-DATA](https://github.com/jvc56/MAGPIE-DATA/tree/main/data/letterdistributions)
+(`english.csv`, `english_super.csv`, `catalan.csv`, `dutch.csv`, `french.csv`,
+`german.csv`, `polish.csv`). Those files upload unchanged. It is a
+comma-separated file with one line per tile and **5 or 7 fields** per line:
+
+`letter,blank_letter,count,value,is_vowel[,fullwidth_letter,fullwidth_blank_letter]`
+
+| Field | Rules |
+|---|---|
+| `letter` | How the tile is written: one or more characters, e.g. `A`, `Ą`, `Ç`, `NY`, `L·L`. Unique within the file. Apart from the blank's `?`, it cannot contain `[`, `]`, `,`, `?`, `*`, `_` or whitespace. At most MAGPIE's `MAX_LETTER_BYTE_LENGTH` bytes. |
+| `blank_letter` | How the tile is written when a blank stands for it, conventionally the lower-case form (`a`, `ą`, `ny`, `l·l`). Unique within the file, with the same character rules. |
+| `count` | Non-negative integer: how many of this tile are in the bag. |
+| `value` | Non-negative integer: points. |
+| `is_vowel` | `1` or `0`. |
+| `fullwidth_letter`, `fullwidth_blank_letter` | Optional; give both or neither. These are the fullwidth forms MAGPIE uses to align text output. They are stored for fidelity but not used by the Wordfall UI. |
+
+- **The first line is the blank** and must be `?,?,<count>,0,0`. MAGPIE treats
+  the first tile as the blank. A count of `0` means a bag with no blanks.
+- **Line order is tile order.** Alphagrams and leaves are sorted in this order,
+  so the blank always sorts first.
+- **A line with other than 5 or 7 fields is an error**, as in MAGPIE. The file
+  may end with or without a newline.
+- **The name** entered in the form defaults to the file name without `.csv`
+  (`english`, `english_super`) and must be unused.
+
+An excerpt of MAGPIE-DATA's `catalan.csv`:
+
+```
+?,?,2,0,0
+A,a,12,1,1
+B,b,2,3,0
+C,c,3,2,0
+Ç,ç,1,10,0
+…
+L,l,4,1,0
+L·L,l·l,1,10,0
+M,m,3,2,0
+N,n,6,1,0
+NY,ny,1,10,0
+O,o,5,1,1
+P,p,2,3,0
+QU,qu,1,8,0
+…
+```
+
+#### Lexicon file
+
+A tab-separated file (`.tsv`) with three fields per line:
+`word⇥playability⇥definition`. There is one line per word, in any order, and at
+least one word.
+
+| Field | Rules |
+|---|---|
+| `word` | 1–15 tiles of the chosen letter distribution, in MAGPIE notation, with no blanks. No duplicates. In a Catalan lexicon, `ANYS` is written `A[NY]S`. |
+| `playability` | Decimal number. Higher means more playable. Words with equal values tie, as described under [Lax](#filter-reference). |
+| `definition` | Required, 1–10,000 characters, no tabs. Part-of-speech tags in square brackets (`[n -S]`, `[v]`) are what the Part of Speech filter reads. |
+
+A line with fewer or more than three fields is an error. The name entered in the
+form must be unused.
+
+```
+AA⇥3811⇥(Hawaiian) a volcanic rock consisting of angular blocks of lava with a very rough surface [n -S]
+AAH⇥2104⇥an interjection expressing surprise [interj] / to exclaim in surprise [v -ED, -ING, -S]
+QI⇥542388⇥the vital force that in Chinese thought is inherent in all things [n -S]
+```
+
+#### Leave values file
+
+A comma-separated file with two fields per line: `leave,value`. There is one
+line per leave, in any order, and at least one leave.
+
+| Field | Rules |
+|---|---|
+| `leave` | 1–6 tiles of the **lexicon's** letter distribution, in MAGPIE notation, with `?` for a blank. The tiles may be in any order within the field (`SIER?` and `?EIRS` are the same leave) and are stored in canonical order: the distribution's tile order, blank first. No tile may appear more times than the bag holds. No duplicates after canonical ordering. |
+| `value` | Decimal number. |
+
+The file does not have to list every possible leave; a leave missing from it
+simply cannot be quizzed. The chosen lexicon must not already have leave
+values. To replace them, delete the existing set (allowed only while no cascade
+uses it) and upload again.
+
+```
+?,28.292000
+A,-0.378000
+EIRS?,34.117000
+```
+
+### Upload limits
+
+Uploads are synchronous. The largest realistic file, around a million leaves, is
+expected to validate and insert in well under a minute. Admin upload endpoints
+accept request bodies up to 100 MB and have a 120-second timeout, and the ALB
+idle timeout is raised to match.
+
+### Immutability and deletion
+
+Catalog data is **immutable once uploaded**. There are no edit endpoints; a
+corrected word list is a new lexicon with a new name (`CSW24` → `CSW24-fixed` or
+`CSW27`). Immutability is what lets a cascade store only question keys, lets
+downloaded answers be cached forever, and makes re-running a stored search always
+give the same questions.
+
+An admin can delete an item only when nothing references it. The foreign keys
+enforce this, and the admin page disables the delete button and explains what is
+still using the item:
+
+- **A letter distribution** is in use while any lexicon refers to it.
+- **A lexicon** is in use while it has leave values, or while any cascade or In
+  Lexicon filter refers to it.
+- **A lexicon's leave values** are in use while any Leave Value cascade refers
+  to them.
+
+### Loading changes into running servers
+
+After an upload or deletion commits, the backend runs
+`NOTIFY catalog_changed`. Every backend instance `LISTEN`s on that channel and
+reconciles its in-memory indexes with the database: it builds indexes for new
+items and drops deleted ones. It also reconciles every 60 seconds in case a
+notification is missed. A new item appears in the cascade builder once every
+instance has loaded it; until then, the item is marked **loading** in `/admin`.
+
+---
+
+## Tiles
+
+Words, alphagrams, leaves, patterns and question keys are all **sequences of
+tiles**, not strings of English letters. Tiles follow MAGPIE's letter
+distributions.
+
+- **Tile.** Each tile is written as its distribution's `letter`. Usually that
+  is one character (`A`, `Ą`, `Ç`), but it can be several (Catalan `NY`, `QU`,
+  `L·L`). Length always means number of tiles, so Catalan `ANYS` is 3 tiles.
+- **Tile order** is the line order of the distribution file. Alphagrams and
+  leaves are sorted in that order, so a blank comes first (`?EIRS`).
+- **MAGPIE notation** is how tile sequences are written in upload files, stored
+  keys and the API. Single-character tiles are written as they are, and
+  multi-character tiles in square brackets: `A[NY]S`, `?A[L·L]`. The notation is
+  unambiguous. In MAGPIE, lower-case tiles (a tile's `blank_letter`) mean a blank
+  standing for that tile. Wordfall never stores them.
+- **Display** shows each tile's `letter` without brackets. A multi-character
+  tile is drawn as one joined tile, so `ANYS` visibly reads as three tiles.
+- **Typed text** in filter inputs, In Word List entries and typed-mode answers
+  is converted to tiles in three steps:
+  1. Upper-case it.
+  2. Treat any bracketed group as a multi-character tile (`A[NY]S`), except in
+     pattern inputs.
+  3. Match the remaining text greedily, longest tile first, so `ANYS` becomes
+     `A`, `NY`, `S`.
+
+  In pattern inputs, square brackets already mean a set of tiles (see
+  [Pattern syntax](#pattern-syntax)). There, multi-character tiles are typed
+  plainly or inserted from the tile palette. Palette tiles are inserted whole and
+  never re-split. That is how to enter a sequence that greedy matching would
+  otherwise join, such as a separate `N` followed by `Y`.
+- **Blank.** Written and displayed as `?`. In filter inputs `?` means "any tile",
+  so a literal blank is typed as `_`.
+- **Vowels and point values** come from the distribution, so Number of Vowels,
+  Consists of `AEIOU`-style sets, Point Value and probability all work for any
+  language.
+
+Words and leaves both use the **lexicon's** letter distribution.
+
+---
+
+## Filters
+
+There are 21 filters: 20 of Zyzzyva's condition types, in the order of its
+search dropdown, plus Wordfall's **Leave Value** filter at the end. Zyzzyva's
+Belongs to Group condition is deliberately left out; the other filters are
+enough to build any study list. A filter has a type, a Not flag, and
+parameters, and it is either a **predicate** or a **limit**:
+
+- A **predicate** tests one candidate on its own. Zyzzyva checks predicates in
+  three phases for speed: a word graph walk, then SQL, then post-processing. That
+  split is an optimization, not part of their meaning. Wordfall evaluates every
+  predicate in memory (see [Search Engine](#search-engine)).
+- A **limit** (Limit by Probability Order, Limit by Playability Order) ranks
+  the candidates that passed every predicate and keeps a range of that ranking.
+  Limits are **always applied last, after all predicates**, however the rows are
+  ordered.
+
+### Pattern syntax
+
+Anagram Match, Pattern Match and Subanagram Match take a pattern made of tiles
+plus:
+
+| Token | Meaning |
+|---|---|
+| `?` | Any single tile |
+| `*` | Any number of tiles, including none. More than one `*` in an anagram or subanagram pattern means the same as one. |
+| `[ABC]` | Exactly one tile from the set |
+| `_` | A literal blank (Leave Value quizzes only) |
+
+Input is upper-cased as it is typed and converted to tiles, with multi-character
+tiles matched greedily or inserted from the tile palette (see [Tiles](#tiles)).
+Brackets in a pattern always mean a tile set, never MAGPIE's multi-character
+notation, so `[A NY]` and `[ANY]` both mean "`A` or `NY`" in a Catalan lexicon.
+A tile that is not in the distribution, an unbalanced bracket, or an empty
+bracket fails validation.
+
+### Filter reference
+
+Unless a row says otherwise, "word" means the candidate: a word in Anagram and
+Definition quizzes, or a leave in Leave Value quizzes. Lengths and counts are in
+tiles.
+
+| # | Filter | Parameters | Not | Meaning (as implemented in Zyzzyva) |
+|---|---|---|---|---|
+| 1 | **Anagram Match** | pattern | ✓ | The word uses exactly the pattern's tiles, in any order. `?` and `[..]` each stand for one tile; `*` allows any number of extra tiles. `ETX?` → EXIT, NEXT, SEXT, TEXT, VEXT. |
+| 2 | **Pattern Match** | pattern | ✓ | The word matches the pattern in order, left to right. `T?P` → TAP, TIP, TOP, TUP. `?W*M?S` → SWAMIS, SWAMPS, TWASOMES, … |
+| 3 | **Subanagram Match** | pattern | ✓ | Every tile of the word can be taken from the pattern; not every pattern tile has to be used. `LX?` → AL, AX, EL, … LAX, LEX, LOX, LUX. A `*` matches everything. |
+| 4 | **Length** | min, max (1–15) | — | The word has min–max tiles. Setting min = max gives an exact length. |
+| 5 | **In Lexicon** | lexicon | ✓ | The word is also valid in a second lexicon. Negated, it finds words that are new or unique compared with that lexicon, e.g. CSW24 words not in CSW21. |
+| 6 | **In Word List** | list of words | ✓ | The word appears in a list the user pastes or uploads (one word per line, up to 300,000 entries). The list is saved with the filter. Entries that are not valid in the cascade's lexicon are ignored. |
+| 7 | **Number of Vowels** | min, max | — | Count of the distribution's vowel tiles is within min–max. |
+| 8 | **Includes Letters** | tiles | ✓ | Each tile appears in the word at least as many times as it appears in the parameter (`EE` means two or more Es). Negated, the word contains **none** of the tiles: `Includes Q` plus `Not Includes U` finds Q-without-U words. |
+| 9 | **Probability Order** | min, max, blanks (0–2), lax | — | The word's precomputed probability rank among **all words of the same length** in the lexicon is within min–max. See [Probability](#probability-and-probability-order). |
+| 10 | **Limit by Probability Order** | min, max, blanks (0–2), lax | — | *Limit.* Rank the words that survived every predicate by probability, then keep ranks min–max of that list. Example: `Length 7`, `Includes V`, `Limit 1–50` gives the 50 most probable 7s with a V. |
+| 11 | **Playability Order** | min, max, lax | — | The word's precomputed playability rank among all words of the same length is within min–max. |
+| 12 | **Limit by Playability Order** | min, max, lax | — | *Limit.* Like Limit by Probability Order, but ranks by playability value. |
+| 13 | **Number of Unique Letters** | min, max | — | Count of distinct tiles is within min–max. |
+| 14 | **Point Value** | min, max | — | Sum of tile values is within min–max. Tiles count at face value even when a word needs a blank (ZYZZYVA = 43 in English). The maximum allowed is 15 × the distribution's highest tile value. |
+| 15 | **Takes Prefix** | tiles | ✓ | Prefix + word is also a valid word. `PRE` with `VAL*` keeps VALENCE but not VALID. |
+| 16 | **Takes Suffix** | tiles | ✓ | Word + suffix is also a valid word. |
+| 17 | **Part of Speech** | one of: Adjective, Adverb, Conjunction, Definite Article, Indefinite Article, Interjection, Noun, Preposition, Pronoun, Verb | ✓ | The definition contains that part-of-speech tag in brackets: `[adj`, `[adv`, `[conj`, `[definite_article`, `[indefinite_article`, `[interj`, `[n`, `[prep`, `[pron`, `[v`. Zyzzyva matches `[tag ` (tag, then a space) or `[tag]`, so `[n -S]` and `[n]` are nouns and `[interj]` is not. |
+| 18 | **Definition** | text | ✓ | The definition contains the text as a literal, case-insensitive substring. No wildcards. |
+| 19 | **Consists of** | tiles, min %, max % | — | `floor(100 × (tiles of the word that are in the set) / length)` is within min–max. Example: `AEIOU`, 70–100 finds words that are at least 70% vowels. |
+| 20 | **Number of Anagrams** | min, max | — | The number of valid words with this word's alphagram (including itself) is within min–max. |
+| 21 | **Leave Value** *(Wordfall only)* | min, max (decimals; either may be blank) | — | *Leave Value quizzes only.* The leave's stored value is between min and max, inclusive. A blank bound is open, so `min 10, max blank` means "worth at least 10". At least one bound is required, and min ≤ max when both are given. The comparison uses the full stored value, not the rounded display value. |
+
+Details that are easy to get wrong:
+
+- **Range defaults.** A new integer range row starts at min 0 and the maximum
+  allowed value. A row is valid only if it actually narrows something (min > 0
+  or max below the ceiling) and min ≤ max. Leave Value rows start with both
+  bounds blank and are invalid until one is filled in.
+- **Lax** (the order filters). Every word has a unique rank, plus the lowest and
+  highest rank shared by words with the *same* value (`min_order`, `max_order`).
+  Ties are broken by alphagram, then by the word. Strict mode compares the
+  unique rank. Lax mode matches any word whose tie range overlaps min–max,
+  meaning `max_order ≥ min && min_order ≤ max`, so a whole group of tied words
+  is taken or left together. Lax is on by default, as in Zyzzyva.
+- **Lax for the limit filters.** The survivors are ranked by (value descending,
+  alphagram, word), and the kept slice is widened in both directions to include
+  neighbours with an equal value. If several limit rows of the same kind (and
+  the same blank count) are given, the ranges intersect: the highest min and the
+  lowest max.
+- **Several rows of one type** are simply ANDed. Two Length rows intersect; two
+  Includes Letters rows both have to hold.
+
+### Probability and probability order
+
+Following Zyzzyva's `LetterBag::getNumCombinations`, a word's **combinations**
+with `b` blanks (0, 1 or 2) is the number of distinct draws from the bag that
+spell the word:
+
+- `b = 0`: the product over each distinct tile of `C(count in bag, count in word)`.
+- `b = 1`: the 0-blank figure, plus, for each distinct tile, `C(blanks, 1)`
+  times the product with that tile's count reduced by one.
+- `b = 2`: the 1-blank figure, plus, for each unordered pair of tile slots (the
+  same tile twice is allowed when its count permits), `C(blanks, 2)` times the
+  product with both counts reduced.
+
+With no blanks in the distribution, the blank terms are zero. Probability order
+`b` ranks all words of a length by combinations `b`, highest first, with ties
+broken by alphagram and then word.
+
+### Filter applicability by quiz type
+
+**Anagram quizzes** search over words, then turn the matches into questions:
+each distinct alphagram among them is one question. The answer is every valid
+word with that alphagram, **including words that did not match the filters**.
+The question is "what can these tiles make", not "which of these tiles'
+anagrams passed my filters". Limit filters rank words, not alphagrams, the way
+Zyzzyva does, and the limited words are then collapsed to alphagrams.
+
+**Definition quizzes** search over words, and each matching word is one
+question.
+
+**Leave Value quizzes** search over the **lexicon's leave values**. A leave has
+no word-only attributes (validity, definition, playability, hooks), so filters
+that depend on those do not apply. Leave probability uses the lexicon's letter
+distribution, with the blank treated as an ordinary tile.
+
+| Filter | Anagram | Definition | Leave Value |
+|---|---|---|---|
+| Anagram / Pattern / Subanagram Match | ✓ | ✓ | ✓ (Pattern Match matches against the alphabetized leave) |
+| Length | ✓ | ✓ | ✓ (1–6) |
+| In Lexicon | ✓ | ✓ | — |
+| In Word List | ✓ | ✓ | ✓ (the list holds leaves; each entry is put in canonical order on input) |
+| Number of Vowels | ✓ | ✓ | ✓ |
+| Includes Letters | ✓ | ✓ | ✓ |
+| Probability Order / Limit by Probability Order | ✓ | ✓ | ✓ (ranked among leaves of the same size; the blanks parameter is hidden) |
+| Playability Order / Limit by Playability Order | ✓ | ✓ | — |
+| Number of Unique Letters | ✓ | ✓ | ✓ |
+| Point Value | ✓ | ✓ | ✓ (a blank is worth 0) |
+| Takes Prefix / Takes Suffix | ✓ | ✓ | — |
+| Part of Speech / Definition | ✓ | ✓ | — |
+| Consists of | ✓ | ✓ | ✓ |
+| Number of Anagrams | ✓ | ✓ | ✓ (valid words in the lexicon using exactly the leave's tiles; 0 if the leave contains a blank) |
+| Leave Value | — | — | ✓ |
+
+Changing the quiz type on the creation form keeps the filter rows that still
+apply and flags the ones that don't, rather than deleting them silently.
+
+---
+
+## Architecture
+
+```
+Browser
+├── Service worker        (caches the app so it loads offline)
+├── IndexedDB             (cascades, quizzes, grades, answer cards, outbox of operations)
+└── Sync engine ──HTTPS──▶ ALB ──▶ ECS Fargate task
+                                   ├── nginx      (SvelteKit static build; proxies /api)
+                                   └── wordfall   (Axum; in-memory catalog indexes;
+                                         │  ▲      cascade rules; sync; purge task)
+                                         ▼  │ LISTEN catalog_changed
+                                    RDS Postgres  (users, preferences, catalog, saved searches,
+                                                   cascades, quizzes, grades, sync bookkeeping)
+```
+
+- **Postgres is the source of truth** for everything.
+- **The backend holds a read-only in-memory index** for each lexicon and each
+  leave value set, built from Postgres at startup and kept current through
+  `LISTEN/NOTIFY`. Search and answer lookups use these indexes, so no search query
+  ever hits the database.
+- **The browser is local-first for studying.** The player only ever reads and
+  writes IndexedDB. A sync engine sends the user's operations to the server and
+  pulls back changes, whether the connection comes and goes or never drops. See
+  [Offline and Sync](#offline-and-sync).
+- **Cascade rules exist twice**, in Rust on the server and in TypeScript in the
+  browser. Both must pass the same shared test vectors (see [Testing](#testing)).
+
+### Tech Stack
+
+| Concern | Decision |
+|---|---|
+| Language (backend) | Rust (stable toolchain, pinned via `rust-toolchain.toml`) |
+| Web framework | Axum |
+| DB access | SQLx (compile-checked queries, migrations run at startup) |
+| Database | Postgres 16 (RDS in production) |
+| Frontend framework | SvelteKit, built as a static SPA with `adapter-static` |
+| Styling | Tailwind CSS |
+| Component library | shadcn-svelte, dark mode only (Tailwind `darkMode: 'class'` with `dark` always on the root) |
+| Offline app shell | SvelteKit service worker (`src/service-worker.ts`) |
+| Local storage | IndexedDB via the `idb` wrapper |
+| Frontend serving | Nginx container serving the static build and proxying `/api` to the backend |
+| Compute | AWS ECS on Fargate: one task definition with two containers (backend and Nginx) |
+| Load balancer | ALB, HTTPS only (port 80 redirects) |
+| Auth | Built in-house: Argon2 password hashes and PASETO v4.local session cookies |
+| Email | AWS SES (a `console` backend locally) |
+| Rate limiting | `governor` middleware (in-memory token buckets) |
+| Compression | `tower-http` gzip and brotli for API responses (answer card pages in particular) |
+| Secrets | AWS SSM Parameter Store, injected into the task as environment variables |
+| Infrastructure as code | Terraform (VPC, ALB, ECS, RDS, SES, SSM, backups) |
+| Logging | `tracing` with `tracing-subscriber` JSON output to CloudWatch |
+| Local development | Docker Compose: Postgres, backend and Nginx frontend, plus an optional Vite dev server profile for hot reload |
+
+Object storage is not needed in v1. Uploaded files are parsed and written
+straight into Postgres; the original files are not kept.
+
+### Repository layout
+
+| Path | Contents |
+|---|---|
+| `backend/` | Axum and SQLx server: auth, admin uploads, catalog indexes, search engine, cascade rules, sync, purge task. `migrations/0001_initial.sql`. |
+| `frontend/` | SvelteKit SPA, including `lib/cascade/` (rules), `lib/local/` (IndexedDB) and `lib/sync/` (sync engine and downloads). |
+| `contract-fixtures/` | Shared JSON test data: filter types and parameters, cascade rule vectors, shuffle vectors (see [Testing](#testing)). |
+| `docker/` | Backend Dockerfile (multi-stage Rust build → `debian:bookworm-slim`). |
+| `infra/` | Terraform. |
+| `scripts/` | `dev.py` (bring up the stack, create a confirmed admin dev user, upload catalog files through the API), backup and restore scripts. |
+| `docker-compose.yml` | Local stack. |
+
+Lexicon data files are licensed (e.g. Collins Scrabble Words © HarperCollins)
+and are **never committed**. Admins upload them from files they supply.
+
+---
+
+## Catalog Indexes
+
+### Derived attributes
+
+Postgres stores uploaded data as given. The backend builds each lexicon's
+in-memory `LexiconIndex`, computing for every word:
+
+- the word as a tile sequence, `alphagram`, `length`, `num_vowels`,
+  `num_unique_letters`, `point_value`, and a letter count vector sized to the
+  distribution
+- `num_anagrams` (from an alphagram → words map, which also serves Anagram
+  answers)
+- `front_hooks` and `back_hooks` (for the hooks display preference)
+- `combinations[0..=2]`, `probability_order[b]`, `min_probability_order[b]`
+  and `max_probability_order[b]`
+- `playability_order`, `min_playability_order`, `max_playability_order`
+- parsed parts of speech from the definition tags
+
+Each leave value set gets a `LeaveSetIndex` with the same tile-based attributes
+for every leave (length, vowels, unique letters, point value, combinations and
+probability order within size, anagram count against its lexicon), plus the
+value.
+
+Computing these when an index is built, instead of storing them, means there is
+only one implementation of each attribute and no derived column can drift from
+the inputs. It is also cheap: roughly 280,000 words and about 1 million leaves
+take a few seconds of single-core work, which startup and a reload can afford.
+If that is measured and turns out to be too slow, the fix is to cache the built
+index, not to add columns.
+
+Memory use is on the order of 100 MB per full lexicon including definitions,
+plus about 50 MB per full leave value set. The Fargate task is sized for the
+catalog offered, and each index's size is logged when it is built and shown in
+`/admin`.
+
+`/health` reports ready only once every catalog item in the database has been
+indexed at startup. Items that arrive later are built in the background and
+never block requests.
+
+---
+
+## Search Engine
+
+`backend/src/search/` is a pure Rust module with no I/O:
+
+```rust
+pub struct SearchSpec { pub conditions: Vec<Condition> }
+
+pub enum ConditionKind {
+    AnagramMatch(Pattern), PatternMatch(Pattern), SubanagramMatch(Pattern),
+    Length(Range), InLexicon(LexiconId), InWordList(HashSet<TileString>),
+    NumVowels(Range), IncludesLetters(TileCounts),
+    ProbabilityOrder { range: Range, blanks: u8, lax: bool },
+    LimitByProbabilityOrder { range: Range, blanks: u8, lax: bool },
+    PlayabilityOrder { range: Range, lax: bool },
+    LimitByPlayabilityOrder { range: Range, lax: bool },
+    NumUniqueLetters(Range), PointValue(Range),
+    TakesPrefix(TileString), TakesSuffix(TileString),
+    PartOfSpeech(Pos), Definition(String),
+    ConsistsOf { tiles: TileSet, min_pct: u8, max_pct: u8 },
+    NumAnagrams(Range),
+    LeaveValue { min: Option<f64>, max: Option<f64> },
+}
+
+pub struct Condition { pub kind: ConditionKind, pub negated: bool }
+
+pub enum Target<'a> { Words(&'a LexiconIndex), Leaves(&'a LeaveSetIndex) }
+
+pub fn search(target: Target, catalog: &Catalog, quiz_type: QuizType,
+              spec: &SearchSpec) -> Result<Vec<QuestionKey>, SearchError>;
+```
+
+Filter inputs arrive as typed text and are converted to tiles against the
+target's distribution during validation, so the engine itself only compares
+small tile indexes (`u8`).
+
+How a search runs:
+
+1. **Validate** the spec against the quiz type and target: applicability,
+   negation allowed, ranges, pattern syntax, tiles present in the distribution.
+   It returns every error, keyed by row index, so the form can mark each bad
+   row.
+2. **Pick candidates.** Words or leaves of the target. If there is a Length
+   row, iterate only the per-length buckets inside its range, and if there is an
+   exact Anagram Match with no `*`, start from the alphagram map. These are
+   shortcuts only; the results must match a full scan.
+3. **Apply predicates** to each candidate, cheapest first: integer and leave
+   value ranges, then tile counts, then patterns, then definition substring
+   scans. It stops at the first failing predicate.
+4. **Apply limits** to the survivors, grouped by (kind, blanks), with lax
+   widening as described in [Filters](#filters).
+5. **Make questions.** Anagram: dedupe alphagrams. Definition: words.
+   Leave Value: canonical leaves. The result is sorted deterministically. That
+   order becomes the cascade's question index (see [Cascades](#cascades)).
+
+Pattern matching:
+
+- **Anagram and Subanagram** compare tile count vectors. `?` and bracket sets
+  are matched by a small bipartite assignment: sets are few and short, so a
+  greedy most-constrained-first assignment with backtracking is enough.
+- **Pattern Match** compiles to an anchored matcher over tile indexes (`?` → any
+  one tile, `*` → any run, `[..]` → a tile set). Compiled patterns are cached
+  per request.
+
+The search runs on `tokio::task::spawn_blocking`. A search over a full lexicon
+is expected to take tens of milliseconds, and a `SEARCH_TIMEOUT_MS` budget
+(default 2 seconds) returns `422` with "search too broad" rather than tying up
+a worker thread.
+
+**Result caps.** A cascade's Source quiz holds at most `MAX_QUIZ_QUESTIONS`
+questions, default and ceiling **300,000**. The database enforces the same
+ceiling (see [Schema](#schema)), so configuration can lower the cap but not
+raise it. A search over the cap is refused with the count, so the user knows
+how much to narrow it; results are never silently truncated. For a sense of
+scale, all 7- and 8-letter words in CSW24 fit, but a full English leave value
+set (around a million leaves) does not. Preview returns the count and the first
+20 questions.
+
+---
+
+## Cascades
+
+### Questions are stored once per cascade
+
+When a cascade is created, its search results are stored once, in search order,
+as the cascade's **question index**: `cascade_questions(idx → question_key)`.
+Every quiz in the cascade refers to questions by `idx` rather than repeating the
+key. Every level's questions come from the Source quiz's questions, so:
+
+- a level quiz costs a few bytes per question
+- the answer cards downloaded for the Source quiz cover every level that can ever
+  exist in the cascade, including levels created offline
+
+### Deterministic shuffles
+
+Shuffles must come out the same on the device and on the server. A device can
+create a level or reset a quiz while offline, and the server has to end up with
+the same order the user actually studied. Rather than sending whole orderings,
+an operation carries a 64-bit **shuffle seed**, and both sides compute the order
+with the same algorithm:
+
+1. Sort the questions being shuffled by `idx`, ascending.
+2. Seed **SplitMix64** with the seed.
+3. Run **Fisher–Yates** from the last position down to position 1, swapping
+   position `i` with `j = next_u64() mod (i + 1)`.
+
+The Rust and TypeScript versions are checked against the same test vectors. The
+TypeScript version uses `BigInt` for the 64-bit arithmetic.
+
+### Rule implementation
+
+The rules in [Cascade Rules](#cascade-rules) are pure functions, implemented in
+`backend/src/cascade/` and `frontend/src/lib/cascade/`:
+
+```
+finish(cascade, quiz, grades, shuffle_seed, new_quiz_id) → Outcome
+    Cleared { replacement: Option<NewQuiz> }         // replacement at the same level, or none (level removed)
+    Descended { reset_seed, new_level: NewQuiz }     // quiz reset; new quiz at level + 1
+    Reshuffled { reset_seed }                        // nothing correct; reset in place
+restore_quiz(cascade, quiz, shuffle_seed) → Restored  // pushed as the new deepest level
+```
+
+One `shuffle_seed` in an operation derives every shuffle that operation needs.
+The replacement or new level uses `seed`, and a reset uses `seed ^ 0x9E3779B97F4A7C15`,
+so a single number keeps both sides in agreement.
+
+### Working at 300,000 questions
+
+Every step involving a quiz's full question set is written for the maximum size:
+
+- **Creation** stores the question index and the Source quiz in two statements,
+  each passing all values as array parameters through `UNNEST`. No per-row round
+  trips.
+- **Finishing** reads the missed `idx` values (up to 300,000 integers) into Rust,
+  shuffles them, and inserts the new quiz through `UNNEST`.
+- **Resetting** rewrites positions and clears grades in one `UPDATE … FROM
+  UNNEST`. The `(quiz_id, position)` uniqueness constraint is `DEFERRABLE
+  INITIALLY DEFERRED`, so rearranging positions mid-statement doesn't collide.
+- **Answer cards** are downloaded in pages of 10,000, compressed. Anagram cards
+  without definitions come to roughly 10–15 MB uncompressed for 300,000
+  questions, with definitions considerably more. Definitions and hooks are only
+  included when the user's preferences ask for them.
+- **Sync pulls** are paged, so a first sync on a new device never builds one
+  enormous response.
+- **Storage**: a question row plus its indexes costs roughly 100 bytes, so a
+  full 300,000-question quiz is about 30 MB, and the Source quiz plus question
+  index about 45 MB. This is watched on the database dashboard. The Trash's
+  automatic purge keeps cleared quizzes from piling up.
+
+---
+
+## Offline and Sync
+
+### Principles
+
+- **One code path.** The player never talks to the server. It reads and writes
+  IndexedDB, and every change it makes is also appended to an **outbox** as an
+  operation. Being online just means the outbox empties within a second, so the
+  offline case gets exercised every time anyone studies.
+- **The server is authoritative.** It validates every operation against the same
+  cascade rules. If it rejects one, or other devices have made changes, the
+  device's local state is rebuilt from the server's.
+- **Operations are safe to repeat.** Each has a device-generated UUID. Sending
+  it twice, for example after a timeout, has no further effect.
+
+### What needs a connection
+
+| Needs a connection | Works offline |
+|---|---|
+| Logging in, registering, password reset | Opening the app, including after a reload or browser restart |
+| Creating a cascade (search runs on the server) | Studying any downloaded cascade in both answer modes |
+| Start over (creates a new cascade) | Finishing quizzes: clearing, going down, going back up |
+| Saved searches, admin, account changes other than preferences | Trash: restoring quizzes and cascades, Delete forever |
+| Downloading a cascade's answer cards | Changing preferences and controls |
+
+### On the device
+
+**App shell.** The service worker precaches the built app (SvelteKit's
+`$service-worker` `build` and `files` lists) and answers every navigation with
+the cached `index.html`, so `/cascades/:id` loads with no connection. It never
+caches `/api` responses; downloaded data lives in IndexedDB instead. A new app
+version waits and is activated on the next load when no attempt is in progress,
+and IndexedDB schema upgrades run from versioned migrations.
+
+**IndexedDB stores**, all scoped to the user id so two accounts on one device
+never mix:
+
+| Store | Contents |
+|---|---|
+| `meta` | user id, username, `device_id` (a UUID made once per device), sync cursor, last sync time |
+| `preferences` | the user's preferences |
+| `distributions` | the tiles (letter, blank letter, value, vowel) of every distribution the user's cascades use |
+| `cascades`, `quizzes`, `quiz_questions`, `quiz_attempts` | local copies of the server rows |
+| `cards` | answer cards per cascade, keyed by `(cascade_id, idx)` |
+| `outbox` | operations not yet accepted by the server, in `device_seq` order |
+
+**Downloads.**
+- A cascade starts downloading the moment it is created. That covers the user
+  who creates one just before boarding.
+- Every cascade with activity in the last 14 days is kept downloaded, plus any
+  cascade the user marks **Keep offline**.
+- The player shows **Available offline** or download progress. While a download
+  is still running and the device is online, the player fetches the pages it
+  needs on demand, so studying never waits for a download to finish.
+- Card data above a 500 MB soft limit is evicted, least recently used cascade
+  first. Only card data is ever evicted, never unsynced operations.
+- The app calls `navigator.storage.persist()` on first login. The Account page
+  notes that some browsers, notably Safari, can clear site data after a period
+  of not being used.
+
+### Operations
+
+| Operation | Fields | Server applies it when… | Effect |
+|---|---|---|---|
+| `grade` | quiz, attempt, question `idx`, grade, graded at | the quiz is active, the attempt matches, and no later grade for that question exists | Set the grade (the latest `graded_at` wins) and update counters |
+| `move_cursor` | quiz, attempt, position, at | the quiz is active and the attempt matches | Set the cursor (latest wins) |
+| `finish` | quiz, attempt, shuffle seed, new quiz id | the quiz is active, is at the deepest level, the attempt matches, and every question is graded | Apply [Cascade Rules](#cascade-rules) using the server's grades; any new quiz uses the device's id; record the attempt |
+| `restore_quiz` | quiz, shuffle seed | the quiz is cleared and not purged | Push it back as the new deepest level; bring back its cascade if needed |
+| `trash_cascade` | cascade | the cascade is not trashed | Trash it |
+| `restore_cascade` | cascade | the cascade was trashed manually (not cleared) and not purged | Restore it as it was |
+| `purge_quiz` | quiz | the quiz is cleared | Delete it permanently and record a tombstone |
+| `purge_cascade` | cascade | the cascade is trashed | Delete it and all its quizzes permanently and record tombstones |
+| `set_preferences` | changed fields, at | always | Set the fields (latest `at` wins) |
+| `set_bindings` | the full list of bindings, at | the list is valid: every action has 1–3 bindings and no stroke is used twice | Replace the bindings (latest `at` wins) |
+
+Every operation also carries its `id`, `device_id`, `device_seq` and the device's
+timestamp.
+
+### The sync cycle
+
+`POST /api/sync` does a **push** and then a **pull**, in one request.
+
+**Push.**
+1. The server locks the user row and takes a new value of the user's sync
+   sequence: `UPDATE users SET sync_seq = sync_seq + 1 RETURNING sync_seq`. The
+   lock also means two syncs for the same user never run concurrently. Every row
+   this request changes is stamped with that value.
+2. Operations are applied in order, one savepoint each. An operation whose `id`
+   has already been recorded returns its recorded result without being applied
+   again.
+3. Each operation is recorded as `applied` or `rejected`, with a reason. One
+   rejection does not stop the rest of the batch.
+
+**Pull.**
+1. The server returns every row belonging to the user with `updated_seq` greater
+   than the device's cursor: cascades, quizzes, changed quiz questions, attempts,
+   preferences, and tombstones for purged items. Pages run up to 50,000 question
+   rows, with a page token for the rest.
+2. When the last page arrives, the device's cursor is set to the sync sequence
+   the push took.
+3. If the device's cursor is older than the oldest tombstone the server still
+   keeps (tombstones are pruned after 90 days), the server replies
+   `resync_required`. The device then pushes any remaining operations and
+   replaces all its local rows with a full pull.
+
+**Applying a pull on the device** works like a rebase:
+1. Drop every outbox operation the server has now acknowledged, whether applied
+   or rejected.
+2. Write the server's rows into IndexedDB.
+3. Replay the operations still waiting in the outbox on top, using the same
+   cascade rules. Operations that no longer apply are dropped and reported (see
+   below).
+4. Refresh the player if what it was showing changed.
+
+**When the device syncs:**
+- half a second after a new operation, if online
+- on the browser's `online` event
+- when the tab becomes visible again
+- every 30 seconds while the app is open
+- right after logging in
+
+Pushes are sent in batches of up to 500 operations. A batch with a large
+`finish` still fits easily, because shuffle seeds replace orderings.
+
+### Conflicts
+
+Conflicts need **two devices changing the same cascade while at least one is
+offline**. Using one device on a plane never conflicts. The rules:
+
+| Situation | Result |
+|---|---|
+| The same question graded on two devices in the same attempt | The grade with the later `graded_at` wins. |
+| The same quiz finished on two devices | The first `finish` the server receives wins. The other device's `finish` is rejected because its attempt is out of date. Operations that depended on it are dropped, such as grades on the level it created locally. The device shows: "Level 3 was finished on another device. 42 answers from this device weren't kept." |
+| A quiz restored on one device and purged on another | Whichever operation arrives first wins; the other is rejected. |
+| Grades arriving for a quiz that has since been cleared or reset | Rejected silently. They belong to an attempt that no longer exists. |
+| Preferences changed on two devices | Each field keeps its latest change. |
+
+Rejected operations are never retried. After the rebase, the device shows what
+the server has, and a notice appears only when the user's own work was dropped.
+
+### Authentication while offline
+
+- **Signed-in state.** The app keeps the signed-in user's id and username in
+  IndexedDB and treats the user as signed in until a sync is answered with `401`.
+- **Expired session.** A `401` during sync, from an expired session or "Sign out
+  everywhere", keeps all local data and the outbox, and shows **Log in to
+  sync**. Studying continues. Once the user logs in again, the outbox is pushed.
+- **A different user.** If a different user logs in on the device, the previous
+  user's local data stays, untouched, until that user logs in again.
+- **Logging out.** The app tries to sync first. If operations are still unsent,
+  it asks for confirmation before deleting that user's local data, stating how
+  many changes will be lost.
+
+---
+
+## Schema
+
+There is a single migration, `backend/migrations/0001_initial.sql`, run by SQLx
+at startup (SQLx creates its own `_sqlx_migrations` table). It is edited in
+place until the first deployment, after which migrations are append-only. The
+full schema:
+
+```sql
+-- =========================================================================
+-- Wordfall schema
+-- =========================================================================
+
+CREATE EXTENSION IF NOT EXISTS citext;
+
+-- -------------------------------------------------------------------------
+-- Enums
+-- -------------------------------------------------------------------------
+
+CREATE TYPE quiz_type AS ENUM ('anagram', 'definition', 'leave_value');
+
+CREATE TYPE grade AS ENUM ('correct', 'missed');
+
+CREATE TYPE anagram_answer_mode AS ENUM ('flashcard', 'typed');
+
+CREATE TYPE input_action AS ENUM ('show_next', 'toggle_grade', 'previous');
+
+CREATE TYPE input_kind AS ENUM ('mouse_button', 'wheel', 'key');
+
+CREATE TYPE quiz_status AS ENUM ('active', 'cleared');
+
+-- How a quiz came to exist.
+CREATE TYPE quiz_origin AS ENUM (
+    'source',             -- created from the filter search
+    'clear_replacement',  -- the misses of a cleared quiz, at the same level
+    'descent'             -- the misses of a quiz that was not cleared, one level down
+);
+
+CREATE TYPE finish_outcome AS ENUM ('cleared', 'descended', 'reshuffled');
+
+CREATE TYPE sync_op_type AS ENUM (
+    'grade', 'move_cursor', 'finish', 'restore_quiz', 'trash_cascade',
+    'restore_cascade', 'purge_quiz', 'purge_cascade', 'set_preferences',
+    'set_bindings'
+);
+
+CREATE TYPE sync_op_status AS ENUM ('applied', 'rejected');
+
+CREATE TYPE sync_entity AS ENUM ('cascade', 'quiz');
+
+CREATE TYPE condition_type AS ENUM (
+    'anagram_match',
+    'pattern_match',
+    'subanagram_match',
+    'length',
+    'in_lexicon',
+    'in_word_list',
+    'num_vowels',
+    'includes_letters',
+    'probability_order',
+    'limit_by_probability_order',
+    'playability_order',
+    'limit_by_playability_order',
+    'num_unique_letters',
+    'point_value',
+    'takes_prefix',
+    'takes_suffix',
+    'part_of_speech',
+    'definition',
+    'consists_of',
+    'num_anagrams',
+    'leave_value'
+);
+
+CREATE TYPE part_of_speech AS ENUM (
+    'adjective',
+    'adverb',
+    'conjunction',
+    'definite_article',
+    'indefinite_article',
+    'interjection',
+    'noun',
+    'preposition',
+    'pronoun',
+    'verb'
+);
+
+-- -------------------------------------------------------------------------
+-- Accounts
+-- -------------------------------------------------------------------------
+
+CREATE TABLE users (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username            CITEXT NOT NULL UNIQUE
+                            CHECK (username ~ '^[A-Za-z0-9_]{3,32}$'),
+    email               CITEXT NOT NULL UNIQUE
+                            CHECK (length(email) BETWEEN 3 AND 254),
+    password_hash       TEXT NOT NULL,                  -- Argon2 PHC string
+    email_confirmed_at  TIMESTAMPTZ,
+    is_admin            BOOLEAN NOT NULL DEFAULT false, -- set only via SQL
+    session_generation  INTEGER NOT NULL DEFAULT 0,     -- bumped to revoke all sessions
+    sync_seq            BIGINT NOT NULL DEFAULT 0,      -- last sync sequence value issued
+    sync_floor_seq      BIGINT NOT NULL DEFAULT 0,      -- tombstones at or below this were pruned
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (sync_floor_seq <= sync_seq)
+);
+
+CREATE TABLE email_confirmations (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    code_hash   BYTEA NOT NULL UNIQUE CHECK (octet_length(code_hash) = 32), -- SHA-256
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL,               -- created_at + 24 hours
+    used_at     TIMESTAMPTZ
+);
+CREATE INDEX email_confirmations_user_id ON email_confirmations (user_id);
+
+CREATE TABLE password_reset_tokens (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash  BYTEA NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32), -- SHA-256
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL,               -- created_at + 30 minutes
+    used_at     TIMESTAMPTZ
+);
+CREATE INDEX password_reset_tokens_user_id_unused
+    ON password_reset_tokens (user_id) WHERE used_at IS NULL;
+
+-- One row per user, inserted in the same transaction as the user.
+CREATE TABLE user_preferences (
+    user_id                   UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    default_clear_threshold   SMALLINT NOT NULL DEFAULT 80
+                                  CHECK (default_clear_threshold BETWEEN 0 AND 100),
+    leave_value_decimals      SMALLINT NOT NULL DEFAULT 1
+                                  CHECK (leave_value_decimals BETWEEN 0 AND 3),
+    anagram_show_definitions  BOOLEAN NOT NULL DEFAULT false,
+    anagram_show_hooks        BOOLEAN NOT NULL DEFAULT false,
+    anagram_answer_mode       anagram_answer_mode NOT NULL DEFAULT 'flashcard',
+    changed_at                TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest change
+    bindings_changed_at       TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest binding change
+    updated_seq               BIGINT NOT NULL DEFAULT 0           -- also bumped when bindings change
+);
+
+-- Desktop controls. The defaults are inserted with the user; every action keeps
+-- at least one binding.
+CREATE TABLE user_input_bindings (
+    user_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    action   input_action NOT NULL,
+    slot     SMALLINT NOT NULL CHECK (slot BETWEEN 0 AND 2),
+    kind     input_kind NOT NULL,
+    code     TEXT NOT NULL,
+    ctrl     BOOLEAN NOT NULL DEFAULT false,
+    shift    BOOLEAN NOT NULL DEFAULT false,
+    alt      BOOLEAN NOT NULL DEFAULT false,
+    meta     BOOLEAN NOT NULL DEFAULT false,
+    PRIMARY KEY (user_id, action, slot),
+    UNIQUE (user_id, kind, code, ctrl, shift, alt, meta), -- one action per stroke
+    CHECK (CASE kind
+        WHEN 'mouse_button' THEN code IN ('left', 'middle', 'right', 'back', 'forward')
+        WHEN 'wheel'        THEN code IN ('up', 'down')
+        WHEN 'key'          THEN code ~ '^[A-Za-z0-9]{1,32}$'  -- KeyboardEvent.code
+                                 AND code <> 'Escape'
+    END)
+);
+
+-- -------------------------------------------------------------------------
+-- Catalog (uploaded by admins; immutable once uploaded)
+-- -------------------------------------------------------------------------
+
+CREATE TABLE letter_distributions (
+    id           SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name         TEXT NOT NULL UNIQUE CHECK (name ~ '^[A-Za-z0-9 _-]{1,32}$'),
+    uploaded_by  UUID REFERENCES users (id) ON DELETE SET NULL,
+    uploaded_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One row per line of the uploaded MAGPIE letter distribution file.
+CREATE TABLE letter_distribution_tiles (
+    letter_distribution_id  SMALLINT NOT NULL
+                                REFERENCES letter_distributions (id) ON DELETE CASCADE,
+    position                SMALLINT NOT NULL CHECK (position >= 0),
+                                -- line number from 0; the tile order; 0 is the blank
+    letter                  TEXT NOT NULL CHECK (char_length(letter) BETWEEN 1 AND 16),
+    blank_letter            TEXT NOT NULL CHECK (char_length(blank_letter) BETWEEN 1 AND 16),
+    count                   SMALLINT NOT NULL CHECK (count >= 0),  -- tiles of this kind in the bag
+    value                   SMALLINT NOT NULL CHECK (value >= 0),  -- points
+    is_vowel                BOOLEAN NOT NULL,
+    fullwidth_letter        TEXT,
+    fullwidth_blank_letter  TEXT,
+    PRIMARY KEY (letter_distribution_id, position),
+    UNIQUE (letter_distribution_id, letter),
+    UNIQUE (letter_distribution_id, blank_letter),
+    CHECK ((position = 0) = (letter = '?')),
+    CHECK (position <> 0 OR (blank_letter = '?' AND value = 0 AND NOT is_vowel)),
+    CHECK (position = 0 OR (letter       !~ '[\[\],?*_[:space:]]'
+                        AND blank_letter !~ '[\[\],?*_[:space:]]')),
+    CHECK ((fullwidth_letter IS NULL) = (fullwidth_blank_letter IS NULL))
+);
+
+CREATE TABLE lexicons (
+    id                      SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name                    TEXT NOT NULL UNIQUE CHECK (name ~ '^[A-Za-z0-9_-]{1,32}$'),
+    letter_distribution_id  SMALLINT NOT NULL REFERENCES letter_distributions (id),
+    word_count              INTEGER NOT NULL CHECK (word_count > 0),
+    uploaded_by             UUID REFERENCES users (id) ON DELETE SET NULL,
+    uploaded_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX lexicons_letter_distribution_id ON lexicons (letter_distribution_id);
+
+CREATE TABLE lexicon_words (
+    lexicon_id   SMALLINT NOT NULL REFERENCES lexicons (id) ON DELETE CASCADE,
+    word         TEXT NOT NULL CHECK (char_length(word) BETWEEN 1 AND 128
+                                      AND position('?' IN word) = 0),
+                     -- MAGPIE notation; 1–15 tiles, checked on upload
+    playability  DOUBLE PRECISION NOT NULL
+                     CHECK (playability NOT IN ('NaN'::float8, 'Infinity'::float8, '-Infinity'::float8)),
+    definition   TEXT NOT NULL CHECK (char_length(definition) BETWEEN 1 AND 10000),
+    PRIMARY KEY (lexicon_id, word)
+);
+
+-- At most one per lexicon. Leaves use the lexicon's letter distribution.
+CREATE TABLE leave_sets (
+    id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    lexicon_id   SMALLINT NOT NULL UNIQUE REFERENCES lexicons (id),
+    leave_count  INTEGER NOT NULL CHECK (leave_count > 0),
+    uploaded_by  UUID REFERENCES users (id) ON DELETE SET NULL,
+    uploaded_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (id, lexicon_id)   -- target of cascades' composite foreign key
+);
+
+CREATE TABLE leave_values (
+    leave_set_id  INTEGER NOT NULL REFERENCES leave_sets (id) ON DELETE CASCADE,
+    leave         TEXT NOT NULL CHECK (char_length(leave) BETWEEN 1 AND 64),
+                      -- MAGPIE notation; 1–6 tiles in distribution order, blanks first
+    value         DOUBLE PRECISION NOT NULL
+                      CHECK (value NOT IN ('NaN'::float8, 'Infinity'::float8, '-Infinity'::float8)),
+    PRIMARY KEY (leave_set_id, leave)
+);
+
+-- -------------------------------------------------------------------------
+-- Filter specifications (shared by saved searches and cascades)
+-- -------------------------------------------------------------------------
+
+CREATE TABLE search_specs (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX search_specs_user_id ON search_specs (user_id);
+
+CREATE TABLE search_conditions (
+    spec_id               UUID NOT NULL REFERENCES search_specs (id) ON DELETE CASCADE,
+    position              SMALLINT NOT NULL CHECK (position BETWEEN 0 AND 99),
+    condition_type        condition_type NOT NULL,
+    negated               BOOLEAN NOT NULL DEFAULT false,
+
+    -- Parameters. Which ones are set depends on condition_type (see CHECK below).
+    text_value            TEXT CHECK (length(text_value) BETWEEN 1 AND 200),
+                              -- pattern, tiles, prefix, suffix or definition text,
+                              -- stored as the user typed it
+    part_of_speech_value  part_of_speech,
+    other_lexicon_id      SMALLINT REFERENCES lexicons (id),
+    min_value             INTEGER CHECK (min_value >= 0),
+    max_value             INTEGER CHECK (max_value >= 0),
+    min_leave_value       DOUBLE PRECISION,
+    max_leave_value       DOUBLE PRECISION,
+    blanks                SMALLINT CHECK (blanks BETWEEN 0 AND 2),
+    lax                   BOOLEAN,
+
+    PRIMARY KEY (spec_id, position),
+
+    CHECK (min_value IS NULL OR max_value IS NULL OR min_value <= max_value),
+    CHECK (min_leave_value IS NULL OR max_leave_value IS NULL
+           OR min_leave_value <= max_leave_value),
+
+    -- Not is only allowed where Zyzzyva allows it.
+    CHECK (NOT negated OR condition_type IN (
+        'anagram_match', 'pattern_match', 'subanagram_match', 'in_lexicon',
+        'in_word_list', 'includes_letters', 'takes_prefix', 'takes_suffix',
+        'part_of_speech', 'definition')),
+
+    -- Exactly the parameters each type uses are present.
+    CHECK (CASE
+        WHEN condition_type IN ('anagram_match', 'pattern_match', 'subanagram_match',
+                                'includes_letters', 'takes_prefix', 'takes_suffix',
+                                'definition')
+            THEN text_value IS NOT NULL
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 1
+        WHEN condition_type IN ('length', 'num_vowels', 'num_unique_letters',
+                                'point_value', 'num_anagrams')
+            THEN num_nonnulls(min_value, max_value) = 2
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 2
+        WHEN condition_type IN ('probability_order', 'limit_by_probability_order')
+            THEN num_nonnulls(min_value, max_value, blanks, lax) = 4
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 4
+        WHEN condition_type IN ('playability_order', 'limit_by_playability_order')
+            THEN num_nonnulls(min_value, max_value, lax) = 3
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 3
+        WHEN condition_type = 'consists_of'
+            THEN num_nonnulls(text_value, min_value, max_value) = 3
+             AND max_value <= 100
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 3
+        WHEN condition_type = 'part_of_speech'
+            THEN part_of_speech_value IS NOT NULL
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 1
+        WHEN condition_type = 'in_lexicon'
+            THEN other_lexicon_id IS NOT NULL
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 1
+        WHEN condition_type = 'in_word_list'   -- entries live in search_condition_words
+            THEN num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, min_leave_value,
+                              max_leave_value, blanks, lax) = 0
+        WHEN condition_type = 'leave_value'    -- either bound may be open, not both
+            THEN num_nonnulls(min_leave_value, max_leave_value) >= 1
+             AND num_nonnulls(text_value, part_of_speech_value, other_lexicon_id,
+                              min_value, max_value, blanks, lax) = 0
+    END)
+);
+CREATE INDEX search_conditions_other_lexicon_id
+    ON search_conditions (other_lexicon_id) WHERE other_lexicon_id IS NOT NULL;
+
+-- In Word List entries, as typed (upper-cased). Converted to tiles at search time.
+CREATE TABLE search_condition_words (
+    spec_id   UUID NOT NULL,
+    position  SMALLINT NOT NULL,
+    entry     TEXT NOT NULL CHECK (char_length(entry) BETWEEN 1 AND 128),
+    PRIMARY KEY (spec_id, position, entry),
+    FOREIGN KEY (spec_id, position)
+        REFERENCES search_conditions (spec_id, position) ON DELETE CASCADE
+);
+
+CREATE TABLE saved_searches (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+    spec_id     UUID NOT NULL UNIQUE REFERENCES search_specs (id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, name)
+);
+
+-- -------------------------------------------------------------------------
+-- Cascades and quizzes
+-- -------------------------------------------------------------------------
+
+CREATE TABLE cascades (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    name              TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 200),
+    quiz_type         quiz_type NOT NULL,
+    lexicon_id        SMALLINT NOT NULL REFERENCES lexicons (id),
+    leave_set_id      INTEGER,                    -- Leave Value cascades only
+    spec_id           UUID NOT NULL REFERENCES search_specs (id),
+                          -- a private copy, never a saved search's spec
+    clear_threshold   SMALLINT NOT NULL CHECK (clear_threshold BETWEEN 0 AND 100),
+    question_count    INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 300000),
+    depth             INTEGER NOT NULL CHECK (depth >= 0), -- number of active levels
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_activity_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    cleared_at        TIMESTAMPTZ,                -- depth reached 0
+    trashed_at        TIMESTAMPTZ,                -- set on clearing or by the user
+    updated_seq       BIGINT NOT NULL,
+
+    -- The leave value set must belong to the cascade's lexicon.
+    FOREIGN KEY (leave_set_id, lexicon_id) REFERENCES leave_sets (id, lexicon_id),
+
+    CHECK ((quiz_type = 'leave_value') = (leave_set_id IS NOT NULL)),
+    CHECK ((cleared_at IS NOT NULL) = (depth = 0)),
+    CHECK (cleared_at IS NULL OR trashed_at IS NOT NULL)
+);
+CREATE INDEX cascades_user_activity ON cascades (user_id, last_activity_at DESC);
+CREATE INDEX cascades_user_seq ON cascades (user_id, updated_seq);
+CREATE INDEX cascades_trashed_at ON cascades (trashed_at) WHERE trashed_at IS NOT NULL;
+CREATE INDEX cascades_spec_id ON cascades (spec_id);
+CREATE INDEX cascades_lexicon_id ON cascades (lexicon_id);
+CREATE INDEX cascades_leave_set_id ON cascades (leave_set_id) WHERE leave_set_id IS NOT NULL;
+
+-- The cascade's questions, in search order. Immutable.
+CREATE TABLE cascade_questions (
+    cascade_id    UUID NOT NULL REFERENCES cascades (id) ON DELETE CASCADE,
+    idx           INTEGER NOT NULL CHECK (idx BETWEEN 0 AND 299999),
+    question_key  TEXT NOT NULL CHECK (char_length(question_key) BETWEEN 1 AND 128),
+                      -- alphagram, word or canonical leave, in MAGPIE notation
+    PRIMARY KEY (cascade_id, idx)
+);
+
+CREATE TABLE quizzes (
+    id                UUID PRIMARY KEY,           -- device-generated, except the Source quiz
+    cascade_id        UUID NOT NULL REFERENCES cascades (id) ON DELETE CASCADE,
+    user_id           UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    level             INTEGER NOT NULL CHECK (level >= 1),
+                          -- for a cleared quiz, the level it was cleared from
+    origin            quiz_origin NOT NULL,
+    origin_quiz_id    UUID REFERENCES quizzes (id) ON DELETE SET NULL,
+    status            quiz_status NOT NULL DEFAULT 'active',
+    attempt           INTEGER NOT NULL DEFAULT 1 CHECK (attempt >= 1),
+    question_count    INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 300000),
+    correct_count     INTEGER NOT NULL DEFAULT 0 CHECK (correct_count >= 0),
+    missed_count      INTEGER NOT NULL DEFAULT 0 CHECK (missed_count >= 0),
+    cursor            INTEGER NOT NULL DEFAULT 0,
+    cursor_moved_at   TIMESTAMPTZ,                -- device time, for latest-wins
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_activity_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    cleared_at        TIMESTAMPTZ,
+    updated_seq       BIGINT NOT NULL,            -- also bumped when any of its questions change
+
+    CHECK ((status = 'cleared') = (cleared_at IS NOT NULL)),
+    CHECK (origin <> 'source' OR origin_quiz_id IS NULL),
+    CHECK (correct_count + missed_count <= question_count),
+    CHECK (cursor BETWEEN 0 AND question_count)
+);
+CREATE UNIQUE INDEX quizzes_one_active_per_level
+    ON quizzes (cascade_id, level) WHERE status = 'active';
+CREATE UNIQUE INDEX quizzes_one_source ON quizzes (cascade_id) WHERE origin = 'source';
+CREATE INDEX quizzes_user_seq ON quizzes (user_id, updated_seq);
+CREATE INDEX quizzes_cleared_at ON quizzes (cleared_at) WHERE status = 'cleared';
+CREATE INDEX quizzes_origin_quiz_id ON quizzes (origin_quiz_id) WHERE origin_quiz_id IS NOT NULL;
+
+CREATE TABLE quiz_questions (
+    quiz_id       UUID NOT NULL REFERENCES quizzes (id) ON DELETE CASCADE,
+    question_idx  INTEGER NOT NULL CHECK (question_idx BETWEEN 0 AND 299999),
+                      -- index into cascade_questions
+    position      INTEGER NOT NULL CHECK (position BETWEEN 0 AND 299999),
+    grade         grade,
+    graded_at     TIMESTAMPTZ,                    -- device time, for latest-wins
+    updated_seq   BIGINT NOT NULL,
+    PRIMARY KEY (quiz_id, question_idx),
+    CONSTRAINT quiz_questions_position_unique
+        UNIQUE (quiz_id, position) DEFERRABLE INITIALLY DEFERRED,
+    CHECK ((grade IS NULL) = (graded_at IS NULL))
+);
+CREATE INDEX quiz_questions_quiz_seq ON quiz_questions (quiz_id, updated_seq);
+
+-- One row per finished attempt. Immutable.
+CREATE TABLE quiz_attempts (
+    quiz_id         UUID NOT NULL REFERENCES quizzes (id) ON DELETE CASCADE,
+    attempt         INTEGER NOT NULL CHECK (attempt >= 1),
+    question_count  INTEGER NOT NULL CHECK (question_count >= 1),
+    correct_count   INTEGER NOT NULL CHECK (correct_count >= 0),
+    missed_count    INTEGER NOT NULL CHECK (missed_count >= 0),
+    outcome         finish_outcome NOT NULL,
+    finished_at     TIMESTAMPTZ NOT NULL,         -- device time
+    updated_seq     BIGINT NOT NULL,
+    PRIMARY KEY (quiz_id, attempt),
+    CHECK (correct_count + missed_count = question_count)
+);
+
+-- -------------------------------------------------------------------------
+-- Sync bookkeeping
+-- -------------------------------------------------------------------------
+
+-- Every operation received, so a repeated operation is recognised. Pruned after 90 days.
+CREATE TABLE sync_operations (
+    id           UUID PRIMARY KEY,                -- device-generated operation id
+    user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    device_id    UUID NOT NULL,
+    device_seq   BIGINT NOT NULL CHECK (device_seq >= 1),
+    op_type      sync_op_type NOT NULL,
+    status       sync_op_status NOT NULL,
+    reason       TEXT,
+    received_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, device_id, device_seq),
+    CHECK ((status = 'rejected') = (reason IS NOT NULL))
+);
+CREATE INDEX sync_operations_received_at ON sync_operations (received_at);
+
+-- Records of purged cascades and quizzes, so other devices remove them. Pruned after 90 days.
+CREATE TABLE sync_tombstones (
+    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    entity      sync_entity NOT NULL,
+    entity_id   UUID NOT NULL,
+    seq         BIGINT NOT NULL,
+    deleted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, entity, entity_id)
+);
+CREATE INDEX sync_tombstones_user_seq ON sync_tombstones (user_id, seq);
+CREATE INDEX sync_tombstones_deleted_at ON sync_tombstones (deleted_at);
+```
+
+Notes on the schema:
+
+- **No JSONB.** Filter parameters are typed columns, and a per-type `CHECK`
+  guarantees each stored condition has exactly the parameters its type uses.
+  The Rust `ConditionKind` enum is loaded from these rows and written back to
+  them. A round-trip test (see [Testing](#testing)) covers all 21 types. Sync
+  operation payloads are not stored at all; only each operation's id, type and
+  result are kept.
+- **The cascade stack is enforced by the database where it can be.** At most one
+  active quiz per level, exactly one Source quiz, `depth = 0` exactly when the
+  cascade is cleared, and a cleared cascade is always in the Trash.
+- **Tiles are validated by the application.** A `CHECK` cannot parse MAGPIE
+  notation against a distribution, so the upload validator guarantees:
+  - every word parses into 1–15 non-blank tiles of its lexicon's distribution
+  - every leave parses into 1–6 tiles of its lexicon's distribution, within bag
+    counts, written in canonical order
+  - a distribution's positions run 0..n−1 with no gaps, and no `letter` is
+    longer than MAGPIE's `MAX_LETTER_BYTE_LENGTH`
+- **Catalog deletion is refused while in use.** References to
+  `letter_distributions`, `lexicons` and `leave_sets` from other catalog rows,
+  cascades and search conditions have no `ON DELETE` action, so deleting a
+  referenced item fails. Deleting an unreferenced lexicon or leave value set
+  cascades to its words or values. The admin API checks references first so it
+  can explain the refusal.
+- **Deleting an account** is a single `DELETE FROM users`. Everything the user
+  owns cascades from `users`. References between user-owned rows
+  (`saved_searches.spec_id`, `cascades.spec_id`) use the default `NO ACTION`,
+  which Postgres checks at the end of the statement. Cascaded deletes of both
+  sides therefore succeed, while deleting a spec that is still in use fails.
+  Catalog items the user uploaded stay, with `uploaded_by` set to `NULL`.
+- **Purging a cascade** deletes its question index, quizzes, questions and
+  attempts by cascade. In the same transaction, the application deletes the
+  cascade's spec if no saved search uses it, writes tombstones for the cascade
+  and each quiz, and bumps the user's sync sequence.
+- **The 300,000 ceiling** lives in `cascades.question_count`,
+  `quizzes.question_count`, `cascade_questions.idx` and `quiz_questions.position`,
+  so no configuration can exceed it.
+- **Invariants left to the application** because a `CHECK` cannot see other
+  rows. Integration tests and the shared rule vectors cover each one.
+  - `question_idx < cascades.question_count`, and `position < quizzes.question_count`
+  - `quizzes.user_id` equals its cascade's `user_id`, and the spec belongs to the
+    same user
+  - `cascades.depth` equals the number of active quizzes, and the active levels
+    are exactly `1..depth`
+  - the counters on `quizzes` match its questions' grades
+  - `search_condition_words` rows belong only to `in_word_list` conditions
+  - `question_key` exists in the cascade's lexicon or leave value set
+  - `word_count` and `leave_count` match their rows
+  - a user has at most `MAX_CASCADES_PER_USER` cascades, counting the Trash
+  - every input action has at least one binding
+
+### Purge task
+
+Each backend instance runs an hourly background task. It first takes
+`pg_try_advisory_lock`, so only one instance purges at a time, and then:
+
+- **purges** cleared quizzes whose `cleared_at` is older than
+  `TRASH_RETENTION_DAYS`, and trashed cascades whose `trashed_at` is older than
+  that, writing tombstones and bumping each affected user's sync sequence
+- **prunes** `sync_operations` and `sync_tombstones` older than
+  `SYNC_RETENTION_DAYS`, raising each affected user's `sync_floor_seq` to the
+  highest tombstone sequence it removed
+
+---
+
+## Authentication
+
+The flows are the conventional ones, built directly on Axum:
+
+- **Register** (`/register`): username, email and password. The server
+  validates all fields and returns `400` with **every** field error at once.
+  Passwords are checked for strength with `zxcvbn` (score ≥ 3) and length.
+  A taken username is reported as a field error, since usernames are not secret.
+  An email already in use gets the same response as a successful registration,
+  and the existing account's owner is emailed a notice instead, so the form
+  cannot be used to find out which emails have accounts. The password is hashed
+  with Argon2. A confirmation code (32 random bytes) is emailed, and only its
+  SHA-256 is stored, with a 24-hour expiry. The `user_preferences` row and the
+  default `user_input_bindings` are created with the user.
+- **Confirm email** (`/confirm-email?code=…`): the page submits the code; on
+  success the user is sent to `/login`. Login is refused with `403` until the
+  email is confirmed.
+- **Login**: rate limited per IP and per username (10 per minute each), checked
+  before any Argon2 verify runs. On success the server sets:
+  - a PASETO **v4.local** session token (32-byte key from
+    `SESSION_SIGNING_KEY`) in an `httpOnly`, `SameSite=Strict` cookie named
+    `wordfall_session`, `Secure` in production, with a 30-day TTL
+  - a CSRF cookie for double-submit on every state-changing request
+
+  The token carries the user id and the account's `session_generation`. Every
+  request re-reads the user row, including `is_admin`, so a deleted account, a
+  bumped generation, or a revoked admin flag takes effect immediately. The long
+  TTL is deliberate: a device that has been offline for weeks can still sync as
+  soon as it reconnects.
+- **Password reset**: always answers with the same message. If the email
+  belongs to a confirmed account, a 30-minute single-use token is emailed.
+  Completing a reset spends every other outstanding reset token and increments
+  `session_generation`, which signs out every session.
+- **Sign out everywhere** and **delete account** (with password re-entry) are on
+  `/account`.
+
+Security generally:
+
+- CSRF double-submit on every cookie-authenticated `POST`, `PUT`, `PATCH` and
+  `DELETE`, including `/api/sync`.
+- `/api/admin/*` requires `is_admin`, and non-admins get `404`, so the admin
+  surface is not advertised.
+- `governor` rate limits on auth endpoints, and per-user limits on search,
+  preview, cascade creation, sync and admin uploads, which are the expensive
+  calls.
+- `429` responses carry `Retry-After`. The sync engine backs off accordingly.
+- `TRUSTED_PROXY_HOPS` controls which `X-Forwarded-For` entry per-IP limits key
+  on (1 behind the ALB and behind the compose Nginx).
+- Every cascade, quiz, saved-search, preference and sync query filters by
+  `user_id`. Another user's resource returns `404`, not `403`, and in a sync
+  operation it is rejected as "not found".
+
+---
+
+## API
+
+All endpoints are JSON under `/api`, except the multipart admin uploads. Every
+endpoint except `auth/*`, `/health`, `GET /api/lexicons` and
+`GET /api/letter-distributions/:name` requires a session.
+
+### Auth and account
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/auth/register` | Create an account; sends the confirmation email |
+| `POST` | `/api/auth/confirm-email` | Confirm with the emailed code |
+| `POST` | `/api/auth/login` | Start a session |
+| `POST` | `/api/auth/logout` | End this session |
+| `POST` | `/api/auth/reset-password` | Request a reset email |
+| `POST` | `/api/auth/reset-password/confirm` | Set a new password with a reset token |
+| `GET` | `/api/auth/me` | `{ user_id, username, is_admin }` or `401` |
+| `POST` | `/api/account/sign-out-everywhere` | Bump `session_generation` |
+| `DELETE` | `/api/account` | Delete the account (requires password) |
+
+Preferences are read and written through sync, not a separate endpoint.
+
+### Catalog and search
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/lexicons` | `[{ name, letter_distribution, word_count, leave_count }]`, where `leave_count` is `null` for a lexicon without leave values. Only items indexed by this instance are listed. |
+| `GET` | `/api/letter-distributions/:name` | `{ name, tiles: [{ letter, blank_letter, count, value, is_vowel }] }` in tile order (blank first), for parsing, display and the tile palette |
+| `POST` | `/api/search/preview` | Body `{ lexicon, quiz_type, conditions[] }` → `{ count, sample[], over_cap }`, or `400` with `{ errors: [{ row, field, message }] }` |
+| `GET` | `/api/searches` | The user's saved searches |
+| `POST` | `/api/searches` | Save `{ name, conditions[] }`; the same name overwrites after the UI confirms |
+| `DELETE` | `/api/searches/:id` | Delete a saved search |
+
+A condition on the wire:
+
+```json
+{ "type": "probability_order", "negated": false,
+  "min": 1, "max": 1000, "blanks": 2, "lax": true }
+```
+
+```json
+{ "type": "leave_value", "negated": false, "min": 10.0, "max": null }
+```
+
+`type` is one of `anagram_match`, `pattern_match`, `subanagram_match`, `length`,
+`in_lexicon`, `in_word_list`, `num_vowels`, `includes_letters`,
+`probability_order`, `limit_by_probability_order`, `playability_order`,
+`limit_by_playability_order`, `num_unique_letters`, `point_value`,
+`takes_prefix`, `takes_suffix`, `part_of_speech`, `definition`, `consists_of`,
+`num_anagrams` or `leave_value`. Only the parameters that type uses are
+accepted; any extra field is a `400`.
+
+### Cascades and sync
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/cascades` | Body `{ name?, lexicon, quiz_type, clear_threshold?, conditions[] }`. Runs the search, stores the question index, shuffles the Source quiz, and returns `{ cascade, source_quiz, sync_seq }`. `422` if the search is empty or over the cap. `409` with `{ error: "cascade_limit", limit, count }` at the [cascade limit](#cascade-limit). `clear_threshold` defaults to the user's preference. |
+| `POST` | `/api/cascades/:id/start-over` | New cascade with the same spec and threshold; returns the same shape. Subject to the cascade limit. |
+| `GET` | `/api/cascades/:id/cards?from=<idx>&limit=<n>&hooks=<0\|1>&definitions=<0\|1>` | Answer cards `[{ idx, key, answer }]` for question indexes `from`…`from+limit−1` (`limit` ≤ 10,000). Immutable, so it is served with `Cache-Control: private, max-age=31536000, immutable` and compressed. |
+| `POST` | `/api/sync` | Body `{ device_id, cursor, page_token?, ops[] }` → `{ results: [{ op_id, status, reason? }], changes: { cascades[], quizzes[], quiz_questions[], quiz_attempts[], preferences?, tombstones[] }, sync_seq, next_page_token?, resync_required? }` |
+
+On the wire, `quiz_questions` changes are grouped per quiz as parallel arrays
+(`question_idx[]`, `position[]`, `grade[]`) to keep large pulls small.
+
+An operation on the wire:
+
+```json
+{ "id": "0192f0c4-…", "device_seq": 118, "at": "2026-09-15T14:03:22.418Z",
+  "type": "finish",
+  "quiz_id": "0192f0a1-…", "attempt": 2,
+  "shuffle_seed": "9241873301934422881", "new_quiz_id": "0192f0c4-…" }
+```
+
+Shuffle seeds are sent as decimal strings, because JSON numbers lose precision
+above 2⁵³.
+
+### Admin
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/admin/catalog` | Every distribution, lexicon and leave value set, with sizes, uploader, upload time, reference counts and per-instance load status |
+| `POST` | `/api/admin/letter-distributions` | Multipart `name`, `file`. `201` with the distribution, or `400` with `{ errors: [{ line, message }], total_errors }`. |
+| `DELETE` | `/api/admin/letter-distributions/:id` | `409` with what still uses it |
+| `POST` | `/api/admin/lexicons` | Multipart `name`, `letter_distribution`, `file` |
+| `DELETE` | `/api/admin/lexicons/:id` | `409` with what still uses it |
+| `POST` | `/api/admin/leave-sets` | Multipart `lexicon`, `file` |
+| `DELETE` | `/api/admin/leave-sets/:id` | `409` with what still uses it |
+
+`GET /health` checks the database connection and that every catalog item present
+at startup is indexed.
+
+---
+
+## Frontend
+
+SvelteKit static SPA. The routes:
+
+| Route | Page |
+|---|---|
+| `/` | Landing page (logged out) or redirect to `/cascades` |
+| `/register`, `/register/check-email`, `/confirm-email`, `/login`, `/reset-password`, `/reset-password/confirm` | Auth |
+| `/cascades` | Cascades page |
+| `/cascades/new` | Cascade builder (type, lexicon, filter rows, load/save search, threshold, preview) |
+| `/cascades/:id` | Player for the cascade's deepest level, with the ladder panel |
+| `/trash` | Cleared quizzes and trashed cascades |
+| `/account` | Preferences, controls, sync status, offline storage use, password, sign out everywhere, delete account |
+| `/admin` | Catalog overview with delete actions (admins only; others get a not-found page) |
+| `/admin/letter-distributions/new`, `/admin/lexicons/new`, `/admin/leave-sets/new` | Upload forms with validation error lists |
+
+Modules:
+
+- **`lib/cascade/`**: the cascade rules and the SplitMix64 and Fisher–Yates
+  shuffle. Pure TypeScript, tested against the shared test vectors.
+- **`lib/local/`**: the IndexedDB schema, migrations and typed accessors. Every
+  write the player makes goes through `applyLocally(op)`, which updates the
+  stores and appends the operation to the outbox in one IndexedDB transaction.
+- **`lib/sync/`**: the sync engine (triggers, push, paged pull, rebase, backoff,
+  `401` handling) and the download manager (card pages, 14-day policy, Keep
+  offline, eviction).
+
+Components:
+
+- **`FilterRow`**: one component per condition. It is driven by a single
+  frontend table (`lib/filters.ts`) giving each type's label, parameter inputs,
+  defaults, bounds, whether Not is allowed, and which quiz types it applies to.
+  The Leave Value filter uses decimal inputs that may be left blank. The backend
+  has its own validation; this table only drives the UI, and a contract test
+  keeps the two in step (see [Testing](#testing)).
+- **`TilePalette`**: clickable tiles for the current distribution, shown under
+  tile inputs when the distribution has any multi-character or non-ASCII tile.
+  Tiles are inserted whole and never re-split.
+- **`TileText`**: renders MAGPIE notation, drawing multi-character tiles as
+  single joined tiles without brackets.
+- **`CascadeLadder`**: the levels of a cascade, with sizes, attempts, last
+  scores and which level is current.
+- **`PlayerLayout`**: chooses the desktop layout (side rails around the quiz area)
+  or the touch layout (top bar, drawer, touch zones) from `pointer: fine` and
+  window width.
+- **`QuizArea`**: turns input into the three actions:
+  - desktop mouse and wheel events inside the area, and key events
+  - touch zones, with tap-versus-drag detection
+  - typed-mode protection
+  - the 120 ms repeat guard
+  - suppressing the context menu, autoscroll and paste
+
+  The rest of the player only ever sees `show_next`, `toggle_grade` and
+  `previous`.
+- **`Flashcard`**: question, answer and grade display. The font scales for long
+  alphagrams and long definitions.
+- **`ControlsEditor`**: the binding list per action, the capture box, conflict
+  and reserved-stroke notices, and Reset to defaults. It saves through a
+  `set_bindings` operation.
+- **`TypedAnagramCard`**: answer input, found counter, found and wrong lists,
+  give-up and override controls. It checks entries against the card's answer
+  list locally.
+- **`AnagramAnswerList`**: shared by both anagram modes. Renders words with
+  optional hooks and definitions, and highlights unfound words.
+- **`LeaveValue`**: formats a raw value with a sign and the preferred number of
+  decimal places.
+- **`FinishBanner`**: the non-blocking message after each finish.
+- **`SyncStatus`**: Synced, *n* changes waiting to sync, Offline, or Log in to
+  sync, plus notices about dropped work.
+- **`OfflineBadge`**: Available offline, download progress, or the Keep offline
+  toggle.
+- **`PreferencesMenu`**: the gear menu in the player. It applies changes locally
+  through a `set_preferences` operation and updates the current card straight
+  away.
+- **`WordListEditor`**: paste or upload a file for In Word List, showing the
+  count and how many entries are not valid in the lexicon.
+- **`UploadForm`**: shared by the three admin uploads. Shows upload progress,
+  then either the created item or the error list.
+
+---
+
+## Configuration
+
+Everything is read from environment variables: a `.env` file locally, ECS task
+definition values in production, with secrets from SSM. A malformed value fails
+startup rather than falling back to a default.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DATABASE_URL` | — | Required |
+| `SESSION_SIGNING_KEY` | — | Required; 32 bytes as hex |
+| `BIND_ADDR` | `0.0.0.0:8080` | |
+| `SESSION_TTL_SECONDS` | `2592000` (30 days) | |
+| `SECURE_COOKIES` | `false` | `true` in any TLS deployment |
+| `MAIL_BACKEND` | `console` | `console` or `ses` |
+| `MAIL_FROM` | `no-reply@wordfall.local` | |
+| `PUBLIC_URL` | `http://localhost:5173` | Base URL for email links |
+| `MAX_QUIZ_QUESTIONS` | `300000` | May be lowered; a value above 300,000 fails startup |
+| `MAX_CASCADES_PER_USER` | `100` | Counts cascades in the Trash |
+| `SEARCH_TIMEOUT_MS` | `2000` | |
+| `TRASH_RETENTION_DAYS` | `30` | Y: how long cleared quizzes and trashed cascades stay in the Trash |
+| `SYNC_RETENTION_DAYS` | `90` | How long operation records and tombstones are kept |
+| `SYNC_MAX_OPS` | `500` | Operations accepted per sync request |
+| `PURGE_INTERVAL_SECONDS` | `3600` | |
+| `ADMIN_UPLOAD_MAX_BYTES` | `104857600` (100 MB) | |
+| `CATALOG_RECONCILE_SECONDS` | `60` | Fallback reload interval if a notification is missed |
+| `TRUSTED_PROXY_HOPS` | `0` | `1` behind the ALB or compose Nginx |
+
+Client-side limits (14-day download window, 500 MB card storage soft limit,
+30-second sync interval) are constants in `lib/sync/config.ts`.
+
+---
+
+## Local Development
+
+```bash
+./scripts/dev.py \
+  --distribution English=~/wordgame/english.csv \
+  --lexicon CSW24:English=~/wordgame/CSW24.tsv \
+  --leaves CSW24=~/wordgame/CSW24_leaves.csv
+```
+
+This command:
+
+1. Brings up `docker compose` (Postgres, backend, Nginx on :5173).
+2. Waits for `/health`.
+3. Creates a confirmed user `dev` / `dev-password` and sets `is_admin` with SQL.
+4. Uploads each given file through the admin API, skipping items that already
+   exist.
+5. Opens the browser.
+
+Uploading through the real API means seeding also tests the upload paths.
+
+`--hot-reload` adds the Vite dev server on :5174. With `MAIL_BACKEND=console`,
+emailed links appear in `docker compose logs backend`.
+
+To try offline studying locally, use the production-style build on :5173 (the
+Vite dev server does not register the service worker). Then use the browser
+DevTools **Offline** toggle, or `docker compose stop backend`, which is
+indistinguishable to the app.
+
+After editing `0001_initial.sql`, reset the local database
+(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`) and restart the backend,
+because SQLx refuses to run a migration whose checksum has changed. Also clear
+the site data in the browser, because local cursors no longer match.
+
+---
+
+## Deployment and Operations
+
+- **Terraform** in `infra/` covers:
+  - VPC with public subnets (ALB) and private subnets (ECS, RDS)
+  - ALB with an ACM certificate, HTTP → HTTPS redirect, and a 120-second idle
+    timeout for admin uploads
+  - ECS cluster, service and task definition (backend and Nginx containers)
+  - RDS Postgres, with 30-day point-in-time recovery
+  - SES domain identity
+  - SSM parameters (names only; values are set out of band)
+  - CloudWatch log group
+- **Deploys** build and push both images, then update the ECS service. The
+  backend runs migrations before it binds, and the ALB health check waits for
+  `/health`, which includes catalog indexes being loaded, before sending
+  traffic.
+  - **Caching:** Nginx serves `service-worker.js` and `index.html` with
+    `Cache-Control: no-cache`, so devices pick up new app versions, and hashed
+    assets as immutable.
+  - **Sync compatibility:** a sync API change must stay compatible with the
+    previous app version for at least `SYNC_RETENTION_DAYS`, because devices can
+    be offline with an old app that long. The sync request carries the app
+    version, and a request from a version too old to sync gets `426` with a
+    reload prompt, after its operations have been accepted.
+- **Granting admin** in production is a one-off SQL statement run through a
+  bastion or an ECS exec session. It is documented in the runbook.
+- **Catalog uploads** happen in the browser at `/admin`. Every running instance
+  picks up changes through `LISTEN/NOTIFY`, with no restart or redeploy.
+- **Backups:**
+  - RDS automated backups with point-in-time recovery.
+  - A nightly `pg_dump` to an encrypted, versioned S3 bucket, run as a
+    scheduled Fargate task, with an alarm if no successful dump happens in 36
+    hours.
+  - A documented restore drill. A restore to an earlier point makes server
+    sequences go backwards, so after one, every user's `sync_floor_seq` is set
+    to their `sync_seq`, forcing devices to resync.
+- **Capacity**: RDS storage autoscaling is on, with an alarm on free storage,
+  because large cascades (about 45 MB at 300,000 questions, plus about 30 MB for
+  each large level) are the main driver of database growth. Task memory is sized
+  to the catalog, and each index's size is visible in `/admin`.
+- **Monitoring**: sync rejections are counted by type and reason in logs and
+  graphed. A rise in rejections outside the expected stale-attempt cases points
+  to a divergence between the Rust and TypeScript rules.
+
+---
+
+## Testing
+
+- **Search engine unit tests** (`cargo test --lib`) run against a small
+  hand-built fixture catalog committed to the repo. It contains made-up and
+  public-domain words only, no licensed data:
+  - an English-style distribution
+  - a Catalan-style distribution with multi-character tiles (`NY`, `QU`, `L·L`)
+    and `Ç`
+  - a lexicon and a leave value set for each
+
+  The tests cover:
+  - Every example in Zyzzyva's search help, recreated with a fixture that
+    contains the example words: `ETX?`, `PI??Z`, `Z[AEIOU][AEIOU]`, `*JBX`,
+    `AT??`, `?W*M?S`, `LX[AU]`, the Includes-Letters Q-not-U case,
+    `Consists of AEIOU 70–100`, and the lax tie cases.
+  - Leave Value: inclusive bounds, open bounds, negative values, and a value
+    exactly equal to a bound.
+  - Tile handling:
+    - `A[NY]S` and typed `ANYS` both parse to three tiles.
+    - Palette-inserted `N` + `Y` stay two tiles.
+    - Malformed notation (`[`, `[]`, `[A]`, nested brackets) is rejected, as in
+      MAGPIE's `ld_str_to_mls`.
+    - Sort order follows the distribution file, with the blank first.
+    - Vowel and point counts use the distribution.
+- **Property tests** (`proptest`):
+  - The shortcut candidate paths return the same results as a full scan.
+  - Anagram Match without wildcards returns exactly the alphagram map entry.
+  - Negating a predicate partitions the candidates.
+  - Limit ranges are subsets of the unlimited results.
+  - Over random sequences of grades, finishes and restores, the cascade stack
+    stays valid: the active levels are exactly `1..depth`, only the deepest level
+    is played, and every level's questions come from the Source quiz.
+- **Probability tests** check `combinations` against brute-force enumeration of
+  a small bag for 0, 1 and 2 blanks (and for a bag with no blanks), and check
+  that ranks, minimum ranks and maximum ranks are consistent on ties.
+- **Shared rule and shuffle vectors** (`contract-fixtures/cascade/`): sequences
+  of operations with the expected cascade state after each one, and seeds with
+  their expected permutations. Both `cargo test` and the frontend unit tests
+  (Vitest) must pass every vector. Together they cover:
+  - all four finish outcomes, including exactly-at-threshold scores and
+    thresholds of 0 and 100
+  - climbing back up
+  - restoring into live, cleared and trashed cascades
+  - purges
+- **Zyzzyva parity** (local only, needs licensed data): a script runs a
+  checked-in list of saved searches against a real CSW24 upload and compares
+  the word lists with exports from Zyzzyva for the same searches. Differences
+  are either fixed or recorded here as intended deviations.
+- **Upload validation tests**: one failing file per rule under
+  [File formats](#file-formats). Each asserts the line numbers in the error list
+  and that nothing was written. A file with many errors reports the first 1,000
+  and the total. Every letter distribution file in MAGPIE-DATA, fetched at a
+  pinned commit, uploads unchanged and produces the expected tiles.
+- **Schema tests**:
+  - Every one of the 21 condition types round-trips through
+    `search_conditions` and back into an equal `ConditionKind`.
+  - For each type, inserting a row with a missing or extra parameter, or with
+    Not where it isn't allowed, is rejected by the `CHECK`.
+  - A Leave Value cascade whose leave value set belongs to another lexicon is
+    rejected by the composite foreign key.
+  - A second active quiz at the same level, a second Source quiz, and a cleared
+    cascade that isn't in the Trash are each rejected.
+- **Sync integration tests** (`cargo test`, `TEST_DATABASE_URL`):
+  - A repeated operation is applied once and gets the same result.
+  - Operations are applied in `device_seq` order, and one rejection doesn't stop
+    the batch.
+  - Two simulated devices cover every row of the [Conflicts](#conflicts) table.
+  - Pulls return exactly the rows changed since the cursor, across page
+    boundaries.
+  - Purges produce tombstones, and a cursor older than `sync_floor_seq` gets
+    `resync_required`.
+  - A device-created quiz id that already exists is rejected.
+  - A 300,000-question `finish` and reset complete within budget.
+- **Other integration tests** (`cargo test`, `TEST_DATABASE_URL`) drive the real
+  router in-process, covering:
+  - the auth flows
+  - admin authorization: non-admins get `404` on every admin route, and
+    revoking `is_admin` takes effect on the next request
+  - uploads followed by catalog reload across two in-process app instances
+    sharing one database (`NOTIFY`), and the reconcile fallback
+  - deletion refused for each kind of reference, and allowed once unreferenced
+  - cascade creation for all three types, Start over, and card pages
+  - the cascade limit, including trashed cascades counting toward it and two
+    simultaneous creations competing for the last slot
+  - the purge task, including two instances running it at the same time
+  - one user being unable to reach another's cascades through REST or sync
+  - the application-level invariants listed under [Schema](#schema)
+- **Scale tests**:
+  - Create a 300,000-question cascade, download its cards, grade every question
+    (half missed) through sync, finish, and assert the timings for creation,
+    download, push, pull and finish stay within budget. A 300,001-question search
+    is refused with its count.
+  - Upload a million-row leave file within the upload timeout.
+- **Contract test**: the frontend filter table and the backend condition schema
+  are both generated or checked against one shared JSON fixture in
+  `contract-fixtures/`, so a new filter parameter cannot be added on one side
+  only.
+- **Frontend**: `npm run check`, Vitest for `lib/cascade`, `lib/local` and
+  `lib/sync` (with `fake-indexeddb`), and Playwright journeys:
+  - Register, confirm, log in, create an anagram cascade with an 80% threshold,
+    and see every cascade rule applied as expected:
+    - Finish Level 1 below the threshold and go down to Level 2.
+    - Clear Level 2 with misses and get a replacement at Level 2.
+    - Clear it with no misses and climb back to Level 1's reshuffled quiz.
+    - Clear Level 1 and see the completion screen.
+  - **The plane:**
+    1. Create a cascade and wait for Available offline.
+    2. Go offline (`context.setOffline(true)`) and reload the page.
+    3. Study through several finishes, including a descent and a clear.
+    4. Restore a quiz from the Trash.
+    5. Go back online and see Synced.
+    6. In a fresh browser context, log in and see identical cascade state, grades
+       and question order.
+  - **Two devices:** finish the same level offline in two browser contexts,
+    reconnect both, and see the second device's notice and matching final state.
+  - **Session expiry while offline:** study, expire the session, reconnect, see
+    Log in to sync, log in, and see the work synced.
+  - Switch to typed mode: a wrong entry grades missed, finding every anagram
+    grades correct, and Enter on an empty input reveals the answer.
+  - Turn on hooks and definitions, and see them in anagram answers.
+  - **Desktop controls:**
+    - Left click shows and advances, right click toggles, and middle click goes
+      back, with no context menu appearing.
+    - Clicks on the side rails do nothing to the quiz.
+    - Rebind Toggle grade to the wheel and to `Shift+T`, and see both work and
+      the change sync to a second browser context.
+    - A binding can't be removed from an action that has only one.
+    - In typed mode, bound letter keys type into the input instead of acting.
+  - **Touch zones** (mobile viewport emulation, portrait and landscape): each
+    zone fires its action, a drag in the Show / Next zone scrolls a long answer
+    without advancing, and a quick double tap advances only once.
+  - Set leave decimals to 3 and see a leave answer rendered to three places.
+  - As an admin, upload a distribution, lexicon and leave value set, see a
+    deliberately broken file rejected with line numbers, build a Leave Value
+    cascade from the new set, and see deletion refused while the cascade exists.
+
+---
+
+## Delivery Phases
+
+1. **Skeleton**: Compose stack, Axum and SQLx with the full `0001_initial.sql`,
+   SvelteKit shell, `/health`, Terraform baseline.
+2. **Accounts**: registration, email confirmation, login and logout, password
+   reset, sessions and CSRF, rate limits, account page, admin authorization.
+3. **Catalog**:
+   - admin uploads with full validation for letter distributions, lexicons and
+     leave value sets
+   - tile parsing
+   - `LexiconIndex` and `LeaveSetIndex` with every derived attribute
+   - probability and playability ordering
+   - `LISTEN/NOTIFY` reload
+   - the `/admin` pages
+4. **Search engine**: all 21 filters, including both limits, validation errors,
+   unit, property and parity tests, `/api/search/preview`.
+5. **Cascade builder**: filter rows, applicability rules, tile palette, word list
+   editor, live preview, saved searches, clear threshold, `POST /api/cascades`,
+   card pages.
+6. **Cascade rules**:
+   - the Rust and TypeScript rule modules, the deterministic shuffle, and the
+     shared test vectors
+   - the sync endpoint, operations, conflicts, tombstones and the purge task
+7. **Local-first player**:
+   - IndexedDB stores, the outbox and the sync engine
+   - service worker, downloads and eviction
+   - the player (desktop layout and configurable controls, touch zones,
+     flashcard and typed modes, the ladder, finish banners, preferences menu)
+   - the cascades and trash pages
+   - the offline Playwright journeys and the 300,000-question scale tests
+8. **Production**: SES, ACM, deploy pipeline, backups and alarms, first catalog
+   upload, restore drill.
