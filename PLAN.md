@@ -34,6 +34,15 @@ Word study data comes in three kinds, all uploaded by admins:
   lexicon and uses that lexicon's letter distribution. A lexicon has at most one
   set of leave values, and may have none.
 
+Each cascade also carries a few **quiz options**: how long a study run is
+(**segment size**), what happens to a quiz that isn't cleared (**progression**),
+and whether typed answers have to be given in alphabetical order. Every quiz the
+cascade creates starts with a copy of them. See [Quiz options](#quiz-options).
+
+Any cascade or quiz can be downloaded as a word list of everything in it, or of
+just what was answered correctly or missed. See
+[Exporting words](#exporting-words).
+
 A cascade's Source quiz can hold up to **300,000 questions**.
 
 Once a cascade has been downloaded, studying works **offline**: a user can log
@@ -50,8 +59,11 @@ when they land. See [Offline and Sync](#offline-and-sync).
 | **Source quiz** | The quiz created from the filter search. It is the first quiz at Level 1. |
 | **Level** | A position in the cascade, numbered from 1. Each level has at most one active quiz. The **deepest level** is the only one that can be played. |
 | **Attempt** | One pass through a quiz's questions. A quiz that is reset starts a new attempt with a new shuffle. |
-| **Finish** | Move on from the last question of an attempt. Finishing always either clears the quiz or sends the user down a level. |
+| **Segment** (or **run**) | A fixed-size run of questions inside an attempt, the length of one sitting. Finishing a run drills its misses before the attempt goes on. Off by default. |
+| **Finish** | Move on from the last question of an attempt. Finishing always either sends the quiz to the Trash, sends the user down a level, or resets the quiz in place. |
 | **Clear threshold** | The score (X%) needed to clear a quiz. It is set per cascade when the cascade is created. |
+| **Quiz options** | Segment size, progression and alphabetical order. They are held by the cascade, copied to each new quiz, and editable on either. |
+| **Progression** | What finishing a quiz below the clear threshold does: **Ladder** (keep the quiz and go down a level) or **Drill** (replace the quiz with its misses). |
 | **Clear** | Finish an attempt with a score of at least the clear threshold. The quiz goes to the Trash. |
 | **Trash** | Cleared quizzes and trashed cascades. They can be restored until they are **purged** (deleted permanently) after the trash retention period (Y days, a server setting that defaults to 30). |
 
@@ -60,7 +72,12 @@ when they land. See [Offline and Sync](#offline-and-sync).
 ## Cascade Rules
 
 A cascade is a **stack of levels**, and the user always plays the **deepest
-level**. When the user finishes an attempt at the deepest level N, with score
+level**. The rules in this first table are the defaults: **Ladder** progression
+and no segments. [Progression](#progression-ladder-or-drill) and
+[Segments](#segments) below give the two ways the cascade's
+[quiz options](#quiz-options) change them.
+
+When the user finishes an attempt at the deepest level N, with score
 = correct ÷ questions:
 
 | Result | What happens | Where the user goes next |
@@ -79,7 +96,9 @@ Why these rules hold together:
   existing quiz.
 - **Upper levels wait.** A quiz above the deepest level sits in its reset,
   reshuffled state until the user climbs back to it, then starts from its first
-  question.
+  question. The one exception is a quiz that is waiting because a
+  [segment](#segments) went down: it keeps its attempt, its grades and its
+  cursor, and resumes at the start of its next run.
 - **The same question can be on several levels.** A question missed at Level 2
   is still in Level 2's reset quiz and also in the new Level 3 quiz. That is
   intended: the user has to get it right in both places.
@@ -93,17 +112,138 @@ down with the misses". Without it, a Level N quiz where every question was misse
 would be followed by an identical Level N + 1 quiz, doubling the work for no
 benefit. It can be removed without changing anything else.
 
+### Quiz options
+
+Three options change how a quiz is studied:
+
+| Option | Default | Effect |
+|---|---|---|
+| **Segment size** | `0` (off) | Study the quiz in runs of this many questions, drilling each run's misses before going on. See [Segments](#segments). |
+| **Progression** | **Ladder** | What finishing a quiz below the clear threshold does. See [Progression](#progression-ladder-or-drill). |
+| **Answers in alphabetical order** | off | In typed anagram mode, answers have to be entered in tile order. See [Typed mode](#typed-mode-anagram-quizzes-only). |
+
+The options belong to the **cascade** and to each **quiz**:
+
+- **The cascade holds the options a new quiz starts with.** They are set when the
+  cascade is created, prefilled from the user's
+  [preferences](#preferences), and can be changed at any time afterwards from the
+  Cascades page or the player. Changing them affects quizzes created from then
+  on, never quizzes that already exist.
+- **Every quiz is created with a copy of its cascade's options**, and that copy
+  can be changed at any time after the quiz exists, from the quiz settings menu
+  in the player or from the level in the cascade's ladder panel. A change takes
+  effect on the current card.
+- **A quiz created from another quiz's misses** — a replacement, a descent or a
+  segment — copies the **cascade's** options, not the finishing quiz's, so a
+  change made to one quiz never propagates down the cascade. The one exception is
+  a segment quiz, whose progression is always Drill (see [Segments](#segments)).
+- The **clear threshold** is not one of these options: it stays a single
+  cascade-wide setting, because a cascade whose levels cleared at different
+  scores would be hard to reason about.
+
+Every option is validated on both sides: segment size is an integer from 0 to
+`MAX_QUIZ_QUESTIONS`, progression is Ladder or Drill, and alphabetical order is a
+flag. A segment size at or above a quiz's question count means the same as 0 for
+that quiz.
+
+### Progression: Ladder or Drill
+
+Progression decides what a finish below the clear threshold does:
+
+| Progression | Finishing below the clear threshold |
+|---|---|
+| **Ladder** (default) | The table above: Level N's quiz stays, reset and reshuffled, and its misses become a new quiz at Level N + 1. The user has to come back and clear Level N before the cascade is done. |
+| **Drill** | Level N's quiz is finished and goes to the Trash whatever the score, and a new quiz of its missed questions takes its place at Level N. The cascade never grows a level from a finish. |
+
+So with Drill, the score decides nothing about where the user goes; only the
+misses do:
+
+| Result | What happens | Where the user goes next |
+|---|---|---|
+| **Some correct, some missed** (any score) | Level N's quiz is finished (to the Trash). A new quiz of the missed questions takes its place at Level N. | The new Level N quiz |
+| **No misses** | Level N's quiz is finished (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **cleared**. |
+| **Nothing correct** | Level N's quiz is **reset** to a new attempt with a new shuffle. Nothing is created, because the replacement would be an identical copy. | The reset Level N quiz |
+
+- The clear threshold is still recorded with the attempt, and the attempt's
+  outcome is `cleared` when the score met it and `replaced` when it did not, so
+  the Trash and the cascade's history still show which attempts were passes.
+- The "nothing correct" rule is kept for the same reason as in Ladder: replacing
+  a quiz with a copy of itself is work for no benefit.
+- A Drill cascade that has never had a segment descent is one level deep for its
+  whole life, which is what makes it a straight drill: keep going until nothing
+  is missed.
+
+**Naming.** *Progression: Ladder / Drill* is the name used throughout this plan
+for the option described as "go back up the ladder". Other candidates, if a
+better one is wanted later: **Repeat style** (*Climb back* / *Straight through*),
+**Keep failed quizzes** (a plain boolean), **Second chances**, **Review mode**
+(*Ladder* / *Chain*), or **On a fail** (*Go down a level* / *Retry the misses*).
+Renaming it touches the enum `quiz_progression`, two columns, the two option
+fields on the wire and the UI strings, and nothing else.
+
+### Segments
+
+A **segment size** of 0 means no segments: an attempt is one run from the first
+question to the last. A segment size S greater than 0 splits the attempt into
+runs of S questions in the attempt's shuffled order — positions 0…S−1, S…2S−1,
+and so on — so the user studies a sitting's worth at a time and drills what they
+missed in it before going on.
+
+Run boundaries are the positions S, 2S, … that fall **strictly inside** the
+quiz. The last run always ends at the last question, where finishing the attempt
+applies the rules above. So a quiz of 250 questions with S = 100 has runs of 100,
+100 and 50, and a quiz of 80 questions with S = 100 behaves exactly as if
+segments were off.
+
+Moving on from the last question of a run that is not the last run:
+
+| Result | What happens | Where the user goes next |
+|---|---|---|
+| **Some of the run missed** | A new quiz of that run's missed questions is created at **Level N + 1**, with Drill progression. Level N's quiz keeps its attempt, its grades and its counters, with its cursor at the start of the next run. | Down to the new Level N + 1 |
+| **None of the run missed** | Nothing is created, and nothing is finished. | The first question of the next run |
+
+- **A segment quiz always drills.** However the cascade's progression is set,
+  the quiz made from a run's misses has Drill progression: finishing it always
+  replaces it with its own misses, until an attempt has no misses at all. Then
+  its level is removed and the user comes back up to the parent quiz's next run.
+  A run is a sitting to be finished, not a level to come back to.
+- **A segment quiz is itself segmented** if the cascade's segment size is
+  smaller than the number of questions in it, by the same rule. In practice a
+  run's misses are far fewer than the run, so this rarely happens.
+- **Coming back up** puts the user on the parent quiz's cursor, which is the
+  first question of the next run, in the same attempt and the same shuffled
+  order.
+- **One descent per run.** A run descends at most once per attempt. Going back
+  with **Previous** into a run that has already descended and changing a grade
+  there does not descend again; the new grade counts at the finish like any
+  other.
+- **The finish still sees every miss.** A question missed in run 1 and then
+  drilled at Level N + 1 is still missed in Level N's attempt: it counts against
+  the attempt's score, and it is in the quiz that the finish creates, whether
+  that is a descent (Ladder) or a replacement (Drill). Segments change **when**
+  misses are drilled, not what the attempt was.
+- **Resetting** a quiz starts its runs again from position 0 in the new attempt.
+- **Changing the segment size mid-attempt** is allowed. Boundaries are always
+  computed from the current size, so the next boundary is the smallest multiple
+  of the current S that is greater than the cursor and less than the question
+  count. Runs that have already descended stay descended, because a descent is
+  recorded by the **boundary position** it happened at, not by a run number.
+- **Segments never clear a quiz**, never change its attempt number and never
+  touch the clear threshold. Only a finish does those.
+
 ### Trash, restore and purge
 
-- **Cleared quizzes** go to the Trash automatically, labelled with their cascade,
-  level and final score.
+- **Finished quizzes** go to the Trash automatically, labelled with their
+  cascade, level and final score, and with whether the score cleared the quiz or
+  it was replaced under [Drill progression](#progression-ladder-or-drill).
 - **A cleared cascade** (Level 1 cleared with no misses) goes to the Trash with
   its last cleared quiz, and the user sees a completion screen showing how many
   levels and attempts it took.
 - **Trashing a cascade manually** (e.g. "I'm done with this word list") moves the
   whole cascade to the Trash with its levels as they are.
-- **Restoring a cleared quiz** pushes it back onto its cascade as the **new
-  deepest level**, starting a fresh attempt with a new shuffle, so it is the
+- **Restoring a finished quiz** pushes it back onto its cascade as the **new
+  deepest level**, starting a fresh attempt with a new shuffle and a fresh copy
+  of the cascade's current [quiz options](#quiz-options), so it is the
   next thing the user studies. If the cascade had been cleared or trashed, it
   comes back too, with the restored quiz at Level 1 if nothing else is left.
   Restoring never merges quizzes and never leaves a gap in the levels.
@@ -112,8 +252,11 @@ benefit. It can be removed without changing anything else.
   that long after it was cleared, and a trashed cascade that long after it was
   trashed. Purging a cascade purges every quiz in it. Users can also purge from
   the Trash immediately with **Delete forever**.
-- **Start over** on a cleared cascade creates a new cascade with the same filters
-  and threshold.
+- **Start over** on a cleared cascade creates a new cascade with the same
+  filters, threshold and [quiz options](#quiz-options).
+- **Exporting** works on anything in the Trash that has not been purged, so a
+  cleared quiz can still be downloaded as a word list (see
+  [Exporting words](#exporting-words)).
 
 ### Cascade limit
 
@@ -147,13 +290,19 @@ and delete catalog data (see [Admin](#admin)). See
 
 Each user has a set of display and answering preferences. They are edited on
 `/account` and also from a settings menu (gear icon) in the quiz player, where a
-change takes effect on the current card straight away. Preferences belong to the
-user, not to a cascade, and they sync like everything else (see
-[Offline and Sync](#offline-and-sync)).
+change takes effect on the current card straight away. That same menu also holds
+the current quiz's [options](#quiz-options), which belong to the quiz rather than
+the user. Preferences belong to the user, not to a cascade, and they sync like
+everything else (see [Offline and Sync](#offline-and-sync)). The three
+`Default …` preferences below only prefill the cascade builder; changing one
+never changes a cascade that already exists.
 
 | Preference | Applies to | Default | Options |
 |---|---|---|---|
 | **Default clear threshold** | New cascades | `80`% | 0–100 |
+| **Default segment size** | New cascades | `0` (off) | 0 – `MAX_QUIZ_QUESTIONS` |
+| **Default progression** | New cascades | **Ladder** | Ladder / Drill |
+| **Default alphabetical order** | New cascades | off | on / off |
 | **Leave value decimal places** | Leave Value answers | `1` | `0`, `1`, `2`, `3` |
 | **Show definitions with anagrams** | Anagram answers | off | on / off |
 | **Show hooks with anagrams** | Anagram answers | off | on / off |
@@ -183,14 +332,21 @@ because searching runs on the server.
    or load a saved set. A saved search stores only the filters, never the
    results, so it can be reused with any lexicon.
 5. **Clear threshold**: prefilled from the user's default.
-6. **Cascade name**: optional. It defaults to a summary of the filters, such as
+6. **Quiz options**: segment size, progression and alphabetical order, each
+   prefilled from the user's defaults. They are explained inline ("a segment of
+   40 means you study 40 at a time and drill what you missed before going on")
+   and can be changed later on the cascade and on any individual quiz. See
+   [Quiz options](#quiz-options). The alphabetical-order option is shown for
+   Anagram cascades only, since nothing else has typed answers, but it is stored
+   whatever the type.
+7. **Cascade name**: optional. It defaults to a summary of the filters, such as
    `CSW24 · Length 7–7 · Probability Order 1–1000`.
-7. **Preview**: runs the search as filters change (debounced) and shows how many
+8. **Preview**: runs the search as filters change (debounced) and shows how many
    questions it matches plus the first few, so the user can adjust before
    committing. The form shows inline errors for invalid rows, such as a
    malformed pattern, a tile not in the distribution, or min > max. Searches
    with more than 300,000 results say so and show the count.
-8. **Create Cascade**: runs the search, shuffles the questions into the Source
+9. **Create Cascade**: runs the search, shuffles the questions into the Source
    quiz, saves the cascade, starts downloading it for offline use, and goes
    straight to the first card. At the [cascade limit](#cascade-limit) the button
    is disabled, with an explanation.
@@ -200,9 +356,13 @@ because searching runs on the server.
 `/cascades` lists the user's cascades, newest activity first. Each shows:
 
 - name, quiz type, lexicon and clear threshold
-- a compact ladder of its levels, e.g. `L1 · 250 (waiting) → L2 · 38 (waiting) →
-  L3 · 9 (4/9 done)`
+- its [quiz options](#quiz-options) in short form, e.g. `segments of 40 · drill`,
+  or nothing when they are all at their defaults
+- a compact ladder of its levels, e.g. `L1 · 250 (waiting, run 3 of 7) →
+  L2 · 38 (waiting) → L3 · 9 (4/9 done)`
 - an **Available offline** badge, or download progress
+- a row menu with **Quiz options**, **Export…** (see
+  [Exporting words](#exporting-words)), **Keep offline** and **Move to Trash**
 
 Selecting a cascade opens the player at its deepest level. The header shows how
 much of the [cascade limit](#cascade-limit) is used (`87 of 100 cascades`) and
@@ -210,9 +370,9 @@ the sync status: **Synced**, **3 changes waiting to sync**, or **Offline**.
 
 ### Trash page
 
-`/trash` lists cleared quizzes and trashed cascades, grouped by cascade. Each
-entry shows when it will be purged and has **Restore** and **Delete forever**
-actions.
+`/trash` lists finished quizzes and trashed cascades, grouped by cascade. Each
+entry shows its final score, whether it cleared or was replaced, and when it will
+be purged, and has **Restore**, **Export…** and **Delete forever** actions.
 
 ### Taking a quiz
 
@@ -249,8 +409,10 @@ device's **primary pointer**:
 - **The side rails** hold everything else, so clicking them never counts as a
   quiz action:
   - left: navigation and sync status
-  - right: level, attempt, progress, clear threshold, the cascade's ladder, and
-    the preferences menu
+  - right: level, attempt, progress, clear threshold, the run indicator when the
+    quiz has a [segment size](#segments) (`run 2 of 3 · 37 of 100`), the
+    cascade's ladder, and the settings menu (user preferences and this quiz's
+    [options](#quiz-options))
 
   Both rails collapse to icons in narrower windows.
 - **Inside the quiz area**, text selection is off and the browser's context menu
@@ -312,6 +474,18 @@ quizzes work by default (**flashcard mode**). The answer that Show / Next reveal
 - The grade is set automatically: **correct** only if every anagram was found
   with no wrong entries, otherwise **missed**. Toggle grade flips it, and Show /
   Next (or Enter) saves it and moves on.
+- **Alphabetical order.** With the quiz's **Answers in alphabetical order**
+  [option](#quiz-options) on, each answer has to be entered at or after the
+  answers already given, in tile order (see [Tiles](#tiles)). An entry that is a
+  valid, not-yet-entered answer but sorts before the furthest answer entered so
+  far is still added to the found list, marked **out of order**, and counted as a
+  wrong entry, so the card grades missed. Accepting it anyway means the user can
+  finish finding the rest instead of being stuck, and comparing against the
+  furthest answer so far — not the previous one — means one slip doesn't make
+  every later answer wrong too. The input shows a hint of what is expected next
+  ("after `RETSINA`"). The option does nothing in flashcard mode, and nothing at
+  all in Definition and Leave Value cascades, but it is stored for every cascade
+  so that switching answer modes later keeps it.
 - **Protecting typing.** While the input has focus, key bindings that would type
   or edit text are ignored: characters, Space, Backspace and Delete without
   Ctrl, Alt or Meta. Other keys still act, including Enter, Escape, the arrow
@@ -362,8 +536,10 @@ The default desktop bindings are:
 #### Touch zones
 
 In the touch layout, the quiz area fills the screen below a slim top bar. The
-bar holds the menu button, level and progress, and the preferences button, and
-the menu opens a drawer with navigation, the ladder and cascade details. The quiz
+bar holds the menu button, level and progress (with the run when the quiz has a
+[segment size](#segments)), and the settings button, and the menu opens a drawer
+with navigation, the ladder, the quiz's [options](#quiz-options) and cascade
+details. The quiz
 area is divided into three tap zones, one per action.
 
 Portrait:
@@ -438,12 +614,72 @@ happened:
 - `Level 2 cleared with 87%. Its 5 missed questions are now Level 2.`
 - `Level 2 cleared with 100%. Back to Level 1.`
 - `Level 2: 64%, and 80% is needed to clear. Level 2 is reshuffled and waiting.
-  Down to Level 3 with 18 missed questions.`
+  Down to Level 3 with 18 missed questions.` (Ladder progression)
+- `Level 2: 64%. Replaced with its 18 missed questions.` (Drill progression)
 - `Level 2: 0%. Reshuffled. Try again.`
 - `Cascade cleared in 4 levels and 9 attempts.` This one leads to the completion
   screen, which offers **Start over** and **Back to cascades**.
 
+Moving on from the last card of a **run** that is not the last run does not
+finish anything; it drills that run's misses (see [Segments](#segments)) and
+says so:
+
+- `Run 2 of 3 done, 9 missed. Down to Level 3 to drill them.`
+- `Run 2 of 3 done, nothing missed. On to run 3.`
+- `Level 3 done. Back to Level 2, run 3 of 3.`
+
 All of this works offline.
+
+### Exporting words
+
+Any cascade or quiz can be downloaded as a word list. **Export…** appears in the
+row menu on `/cascades`, on each level in the player's ladder panel, and on each
+entry on `/trash`, and opens a small dialog:
+
+| Choice | Options | Default |
+|---|---|---|
+| **What** | The whole cascade, or one of its quizzes | whatever the menu was opened from |
+| **Which questions** | All · Correct · Missed · Not yet answered | All |
+| **Format** | **Word list** (`.txt`, one entry per line) or **Spreadsheet** (`.csv`, one row per question) | Word list |
+| **Lines** (word list) | The answers, or the questions | the answers for Anagram cascades, the questions otherwise |
+| **Columns** (spreadsheet) | question, answer, definition, hooks, grade | question, answer, grade |
+
+What "correct" and "missed" mean:
+
+- **For a quiz**: the grades of its current attempt. For a quiz in the Trash, the
+  attempt it finished on.
+- **For a cascade**: the union over its **active** quizzes' current attempts. A
+  question is *missed* if it is graded missed in at least one of them, *correct*
+  if it is graded correct in at least one and missed in none, and *not yet
+  answered* if it is in no active quiz or ungraded everywhere. This is what
+  "everything I'm still getting wrong in this list" means, which is what the
+  export is for. The dialog spells it out in a line of help text.
+
+What ends up in the file, per quiz type:
+
+| Quiz type | Questions | Answers |
+|---|---|---|
+| **Anagram** | one alphagram per line | every word of each selected alphagram, one per line, in alphabetical order |
+| **Definition** | the word | the definition |
+| **Leave Value** | the leave | the value, at the user's decimal places |
+
+- Entries are written in the quiz's shuffled order for a quiz export, and in
+  search order for a cascade export; the dialog offers **alphabetical instead**.
+- [Tiles](#tiles) are written in MAGPIE notation, so a multi-character tile
+  round-trips (`A[NY]S`), and files are UTF-8 with a trailing newline. CSV is
+  RFC 4180 with a header row.
+- The file is named after the source, e.g. `CSW24 7s — L2 missed.txt`, with
+  characters that filenames can't hold replaced.
+
+**How it is produced.** The export is built on the device from IndexedDB, so it
+works offline for a downloaded cascade, in a worker and in chunks so a
+300,000-question list doesn't block the page, and handed over as a Blob. Answers,
+definitions and hooks come from the cascade's answer cards, and definitions and
+hooks are only in the local cards if the user's preferences asked for them, so an
+export that needs something the device doesn't have falls back to
+`GET /api/cascades/:id/export`, which streams the same file from the server. When
+that is needed and there is no connection, the dialog says so and offers to
+export the questions alone, which never needs anything but local data.
 
 ---
 
@@ -862,9 +1098,9 @@ straight into Postgres; the original files are not kept.
 
 | Path | Contents |
 |---|---|
-| `backend/` | Axum and SQLx server: auth, admin uploads, catalog indexes, search engine, cascade rules, sync, purge task. `migrations/0001_initial.sql`. |
-| `frontend/` | SvelteKit SPA, including `lib/cascade/` (rules), `lib/local/` (IndexedDB) and `lib/sync/` (sync engine and downloads). |
-| `contract-fixtures/` | Shared JSON test data: filter types and parameters, cascade rule vectors, shuffle vectors (see [Testing](#testing)). |
+| `backend/` | Axum and SQLx server: auth, admin uploads, catalog indexes, search engine, cascade rules, sync, exports, purge task. `migrations/0001_initial.sql`. |
+| `frontend/` | SvelteKit SPA, including `lib/cascade/` (rules), `lib/local/` (IndexedDB), `lib/sync/` (sync engine and downloads) and `lib/export/` (word lists). |
+| `contract-fixtures/` | Shared JSON test data: filter types and parameters, cascade rule vectors, shuffle vectors, export fixtures (see [Testing](#testing)). |
 | `docker/` | Backend Dockerfile (multi-stage Rust build → `debian:bookworm-slim`). |
 | `infra/` | Terraform. |
 | `scripts/` | `dev.py` (bring up the stack, create a confirmed admin dev user, upload catalog files through the API), backup and restore scripts. |
@@ -1031,15 +1267,32 @@ The rules in [Cascade Rules](#cascade-rules) are pure functions, implemented in
 
 ```
 finish(cascade, quiz, grades, shuffle_seed, new_quiz_id) → Outcome
-    Cleared { replacement: Option<NewQuiz> }         // replacement at the same level, or none (level removed)
-    Descended { reset_seed, new_level: NewQuiz }     // quiz reset; new quiz at level + 1
+    Finished { cleared: bool, replacement: Option<NewQuiz> }
+                                                     // quiz to the Trash; replacement at the same
+                                                     // level, or none (level removed). `cleared`
+                                                     // says whether the score met the threshold.
+    Descended { reset_seed, new_level: NewQuiz }     // Ladder only: quiz reset; new quiz at level + 1
     Reshuffled { reset_seed }                        // nothing correct; reset in place
+
+next_boundary(quiz) → Option<position>               // smallest multiple of the quiz's segment size
+                                                     // above its cursor and below its question count
+
+finish_segment(cascade, quiz, grades, segment_end, shuffle_seed, new_quiz_id) → SegmentOutcome
+    Drilled { new_level: NewQuiz }                   // the run's misses, one level down, Drill
+    Continued                                        // nothing missed in the run
+                                                     // both move the cursor to segment_end
+
 restore_quiz(cascade, quiz, shuffle_seed) → Restored  // pushed as the new deepest level
 ```
 
-One `shuffle_seed` in an operation derives every shuffle that operation needs.
-The replacement or new level uses `seed`, and a reset uses `seed ^ 0x9E3779B97F4A7C15`,
-so a single number keeps both sides in agreement.
+- `finish` reads the cascade's **progression** to choose between `Finished` and
+  `Descended`, and every quiz these functions create takes its
+  [options](#quiz-options) from the **cascade** row, except a segment quiz, which
+  is always Drill. Both sides read the same cascade row, so both build the same
+  quiz.
+- One `shuffle_seed` in an operation derives every shuffle that operation needs.
+  The replacement or new level uses `seed`, and a reset uses
+  `seed ^ 0x9E3779B97F4A7C15`, so a single number keeps both sides in agreement.
 
 ### Working at 300,000 questions
 
@@ -1059,6 +1312,10 @@ Every step involving a quiz's full question set is written for the maximum size:
   included when the user's preferences ask for them.
 - **Sync pulls** are paged, so a first sync on a new device never builds one
   enormous response.
+- **Exports** are written in chunks, in a worker on the device and as a stream on
+  the server, so a 300,000-question word list never needs the whole file in
+  memory at once. With every anagram's words included, such a file is on the
+  order of tens of megabytes.
 - **Storage**: a question row plus its indexes costs roughly 100 bytes, so a
   full 300,000-question quiz is about 30 MB, and the Source quiz plus question
   index about 45 MB. This is watched on the database dashboard. The Trash's
@@ -1088,7 +1345,8 @@ Every step involving a quiz's full question set is written for the maximum size:
 | Creating a cascade (search runs on the server) | Studying any downloaded cascade in both answer modes |
 | Start over (creates a new cascade) | Finishing quizzes: clearing, going down, going back up |
 | Saved searches, admin, account changes other than preferences | Trash: restoring quizzes and cascades, Delete forever |
-| Downloading a cascade's answer cards | Changing preferences and controls |
+| Downloading a cascade's answer cards | Changing preferences, controls and quiz options |
+| Exporting answers or definitions the device has not downloaded | Exporting anything the device already has |
 
 ### On the device
 
@@ -1131,7 +1389,10 @@ never mix:
 |---|---|---|---|
 | `grade` | quiz, attempt, question `idx`, grade, graded at | the quiz is active, the attempt matches, and no later grade for that question exists | Set the grade (the latest `graded_at` wins) and update counters |
 | `move_cursor` | quiz, attempt, position, at | the quiz is active and the attempt matches | Set the cursor (latest wins) |
-| `finish` | quiz, attempt, shuffle seed, new quiz id | the quiz is active, is at the deepest level, the attempt matches, and every question is graded | Apply [Cascade Rules](#cascade-rules) using the server's grades; any new quiz uses the device's id; record the attempt |
+| `finish` | quiz, attempt, shuffle seed, new quiz id | the quiz is active, is at the deepest level, the attempt matches, and every question is graded | Apply [Cascade Rules](#cascade-rules) using the server's grades and the cascade's progression; any new quiz uses the device's id; record the attempt |
+| `finish_segment` | quiz, attempt, segment end, shuffle seed, new quiz id | the quiz is active, is at the deepest level, the attempt matches, its segment size is greater than 0, the segment end is a multiple of it strictly between 0 and the question count, every question before the segment end is graded, and no quiz already exists for this quiz, attempt and segment end | Create the drill quiz one level down from the run's misses (nothing if there are none) and move the cursor to the segment end. See [Segments](#segments) |
+| `set_cascade_options` | cascade, changed option fields, at | the cascade exists and is not purged | Set the fields (latest `at` wins). Only later quizzes are affected |
+| `set_quiz_options` | quiz, changed option fields, at | the quiz is active | Set the fields (latest `at` wins) |
 | `restore_quiz` | quiz, shuffle seed | the quiz is cleared and not purged | Push it back as the new deepest level; bring back its cascade if needed |
 | `trash_cascade` | cascade | the cascade is not trashed | Trash it |
 | `restore_cascade` | cascade | the cascade was trashed manually (not cleared) and not purged | Restore it as it was |
@@ -1200,6 +1461,9 @@ offline**. Using one device on a plane never conflicts. The rules:
 | The same quiz finished on two devices | The first `finish` the server receives wins. The other device's `finish` is rejected because its attempt is out of date. Operations that depended on it are dropped, such as grades on the level it created locally. The device shows: "Level 3 was finished on another device. 42 answers from this device weren't kept." |
 | A quiz restored on one device and purged on another | Whichever operation arrives first wins; the other is rejected. |
 | Grades arriving for a quiz that has since been cleared or reset | Rejected silently. They belong to an attempt that no longer exists. |
+| The same run finished on two devices | The first `finish_segment` wins. The second is rejected as a duplicate for that quiz, attempt and segment end, and the device rebases onto the drill quiz the first one created. |
+| Quiz or cascade options changed on two devices | Each field keeps its latest change, like preferences. |
+| A quiz created while the cascade's options were different | Nothing happens to it. Options are copied at creation and never revisited. |
 | Preferences changed on two devices | Each field keeps its latest change. |
 
 Rejected operations are never retried. After the rebase, the device shows what
@@ -1248,21 +1512,35 @@ CREATE TYPE input_action AS ENUM ('show_next', 'toggle_grade', 'previous');
 
 CREATE TYPE input_kind AS ENUM ('mouse_button', 'wheel', 'key');
 
+-- 'cleared' means finished and in the Trash, whether or not the score met the
+-- clear threshold (see Progression).
 CREATE TYPE quiz_status AS ENUM ('active', 'cleared');
+
+-- What a finish below the clear threshold does.
+CREATE TYPE quiz_progression AS ENUM ('ladder', 'drill');
 
 -- How a quiz came to exist.
 CREATE TYPE quiz_origin AS ENUM (
     'source',             -- created from the filter search
     'clear_replacement',  -- the misses of a cleared quiz, at the same level
-    'descent'             -- the misses of a quiz that was not cleared, one level down
+    'drill_replacement',  -- Drill progression: the misses of a quiz that was not cleared,
+                          -- at the same level
+    'descent',            -- Ladder progression: the misses of a quiz that was not cleared,
+                          -- one level down
+    'segment'             -- the misses of one run of a quiz, one level down
 );
 
-CREATE TYPE finish_outcome AS ENUM ('cleared', 'descended', 'reshuffled');
+CREATE TYPE finish_outcome AS ENUM (
+    'cleared',     -- score met the threshold; quiz to the Trash
+    'replaced',    -- Drill: score did not meet the threshold; quiz to the Trash anyway
+    'descended',   -- Ladder: quiz reset, misses one level down
+    'reshuffled'   -- nothing correct; quiz reset in place
+);
 
 CREATE TYPE sync_op_type AS ENUM (
-    'grade', 'move_cursor', 'finish', 'restore_quiz', 'trash_cascade',
-    'restore_cascade', 'purge_quiz', 'purge_cascade', 'set_preferences',
-    'set_bindings'
+    'grade', 'move_cursor', 'finish', 'finish_segment', 'restore_quiz',
+    'trash_cascade', 'restore_cascade', 'purge_quiz', 'purge_cascade',
+    'set_preferences', 'set_bindings', 'set_cascade_options', 'set_quiz_options'
 );
 
 CREATE TYPE sync_op_status AS ENUM ('applied', 'rejected');
@@ -1357,6 +1635,11 @@ CREATE TABLE user_preferences (
     anagram_show_definitions  BOOLEAN NOT NULL DEFAULT false,
     anagram_show_hooks        BOOLEAN NOT NULL DEFAULT false,
     anagram_answer_mode       anagram_answer_mode NOT NULL DEFAULT 'flashcard',
+    -- Defaults for new cascades only; changing one never touches an existing cascade.
+    default_segment_size      INTEGER NOT NULL DEFAULT 0
+                                  CHECK (default_segment_size BETWEEN 0 AND 300000),
+    default_progression       quiz_progression NOT NULL DEFAULT 'ladder',
+    default_require_alphabetical BOOLEAN NOT NULL DEFAULT false,
     changed_at                TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest change
     bindings_changed_at       TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest binding change
     updated_seq               BIGINT NOT NULL DEFAULT 0           -- also bumped when bindings change
@@ -1588,6 +1871,14 @@ CREATE TABLE cascades (
     spec_id           UUID NOT NULL REFERENCES search_specs (id),
                           -- a private copy, never a saved search's spec
     clear_threshold   SMALLINT NOT NULL CHECK (clear_threshold BETWEEN 0 AND 100),
+
+    -- Quiz options: what every quiz created for this cascade starts with.
+    segment_size         INTEGER NOT NULL DEFAULT 0
+                             CHECK (segment_size BETWEEN 0 AND 300000),  -- 0 = no segments
+    progression          quiz_progression NOT NULL DEFAULT 'ladder',
+    require_alphabetical BOOLEAN NOT NULL DEFAULT false,
+    options_changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time, for latest-wins
+
     question_count    INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 300000),
     depth             INTEGER NOT NULL CHECK (depth >= 0), -- number of active levels
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1627,7 +1918,20 @@ CREATE TABLE quizzes (
                           -- for a cleared quiz, the level it was cleared from
     origin            quiz_origin NOT NULL,
     origin_quiz_id    UUID REFERENCES quizzes (id) ON DELETE SET NULL,
+    origin_attempt    INTEGER CHECK (origin_attempt >= 1),   -- the attempt it came out of
+    origin_segment_end INTEGER CHECK (origin_segment_end >= 1),
+                          -- segment quizzes: the run boundary it came from, in the parent's
+                          -- positions. Recorded as a position, not a run number, so changing
+                          -- the segment size mid-attempt cannot re-descend a finished run.
     status            quiz_status NOT NULL DEFAULT 'active',
+
+    -- Quiz options, copied from the cascade at creation and editable afterwards.
+    segment_size         INTEGER NOT NULL DEFAULT 0
+                             CHECK (segment_size BETWEEN 0 AND 300000),
+    progression          quiz_progression NOT NULL DEFAULT 'ladder',
+    require_alphabetical BOOLEAN NOT NULL DEFAULT false,
+    options_changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time, for latest-wins
+
     attempt           INTEGER NOT NULL DEFAULT 1 CHECK (attempt >= 1),
     question_count    INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 300000),
     correct_count     INTEGER NOT NULL DEFAULT 0 CHECK (correct_count >= 0),
@@ -1640,7 +1944,9 @@ CREATE TABLE quizzes (
     updated_seq       BIGINT NOT NULL,            -- also bumped when any of its questions change
 
     CHECK ((status = 'cleared') = (cleared_at IS NOT NULL)),
-    CHECK (origin <> 'source' OR origin_quiz_id IS NULL),
+    CHECK (origin <> 'source' OR (origin_quiz_id IS NULL AND origin_attempt IS NULL)),
+    CHECK ((origin = 'segment') = (origin_segment_end IS NOT NULL)),
+    CHECK (origin <> 'segment' OR progression = 'drill'),  -- a run's misses always drill
     CHECK (correct_count + missed_count <= question_count),
     CHECK (cursor BETWEEN 0 AND question_count)
 );
@@ -1650,6 +1956,10 @@ CREATE UNIQUE INDEX quizzes_one_source ON quizzes (cascade_id) WHERE origin = 's
 CREATE INDEX quizzes_user_seq ON quizzes (user_id, updated_seq);
 CREATE INDEX quizzes_cleared_at ON quizzes (cleared_at) WHERE status = 'cleared';
 CREATE INDEX quizzes_origin_quiz_id ON quizzes (origin_quiz_id) WHERE origin_quiz_id IS NOT NULL;
+-- One descent per run per attempt, so a repeated or racing finish_segment cannot make two.
+CREATE UNIQUE INDEX quizzes_one_per_segment
+    ON quizzes (origin_quiz_id, origin_attempt, origin_segment_end)
+    WHERE origin = 'segment';
 
 CREATE TABLE quiz_questions (
     quiz_id       UUID NOT NULL REFERENCES quizzes (id) ON DELETE CASCADE,
@@ -1721,8 +2031,15 @@ Notes on the schema:
   operation payloads are not stored at all; only each operation's id, type and
   result are kept.
 - **The cascade stack is enforced by the database where it can be.** At most one
-  active quiz per level, exactly one Source quiz, `depth = 0` exactly when the
-  cascade is cleared, and a cleared cascade is always in the Trash.
+  active quiz per level, exactly one Source quiz, at most one quiz per
+  (parent quiz, attempt, run boundary), a segment quiz always on Drill
+  progression, `depth = 0` exactly when the cascade is cleared, and a cleared
+  cascade is always in the Trash.
+- **Quiz options are copied, never referenced.** `cascades` holds what new
+  quizzes start with and `quizzes` holds what each quiz actually uses, so
+  changing a cascade's options can never rewrite the rules a quiz in progress is
+  being played under. Both sets of columns are plain typed columns with the same
+  names, so the copy is one `INSERT … SELECT`.
 - **Tiles are validated by the application.** A `CHECK` cannot parse MAGPIE
   notation against a distribution, so the upload validator guarantees:
   - every word parses into 1–15 non-blank tiles of its lexicon's distribution
@@ -1762,6 +2079,13 @@ Notes on the schema:
   - `word_count` and `leave_count` match their rows
   - a user has at most `MAX_CASCADES_PER_USER` cascades, counting the Trash
   - every input action has at least one binding
+  - a segment quiz's `origin_segment_end` is a multiple of its parent's segment
+    size, is less than the parent's `question_count`, and its questions are
+    exactly the questions its parent has graded missed in positions below that
+    boundary and at or above the previous one
+  - a quiz waiting because of a segment descent has its cursor at that boundary
+  - a quiz's options were copied from its cascade when it was created, which
+    only the creating code can guarantee, so the rule vectors check it
 
 ### Purge task
 
@@ -1887,9 +2211,10 @@ accepted; any extra field is a `400`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/cascades` | Body `{ name?, lexicon, quiz_type, clear_threshold?, conditions[] }`. Runs the search, stores the question index, shuffles the Source quiz, and returns `{ cascade, source_quiz, sync_seq }`. `422` if the search is empty or over the cap. `409` with `{ error: "cascade_limit", limit, count }` at the [cascade limit](#cascade-limit). `clear_threshold` defaults to the user's preference. |
-| `POST` | `/api/cascades/:id/start-over` | New cascade with the same spec and threshold; returns the same shape. Subject to the cascade limit. |
+| `POST` | `/api/cascades` | Body `{ name?, lexicon, quiz_type, clear_threshold?, segment_size?, progression?, require_alphabetical?, conditions[] }`. Runs the search, stores the question index, shuffles the Source quiz, and returns `{ cascade, source_quiz, sync_seq }`. `422` if the search is empty or over the cap. `409` with `{ error: "cascade_limit", limit, count }` at the [cascade limit](#cascade-limit). The threshold and the three [quiz options](#quiz-options) default to the user's preferences, and the Source quiz is created with a copy of the options. |
+| `POST` | `/api/cascades/:id/start-over` | New cascade with the same spec, threshold and options; returns the same shape. Subject to the cascade limit. |
 | `GET` | `/api/cascades/:id/cards?from=<idx>&limit=<n>&hooks=<0\|1>&definitions=<0\|1>` | Answer cards `[{ idx, key, answer }]` for question indexes `from`…`from+limit−1` (`limit` ≤ 10,000). Immutable, so it is served with `Cache-Control: private, max-age=31536000, immutable` and compressed. |
+| `GET` | `/api/cascades/:id/export?scope=<cascade\|quiz>&quiz_id=<uuid>&which=<all\|correct\|missed\|ungraded>&format=<txt\|csv>&lines=<answers\|questions>&columns=<list>&order=<study\|alphabetical>&definitions=<0\|1>&hooks=<0\|1>` | The same file the device builds locally (see [Exporting words](#exporting-words)), streamed as `text/plain` or `text/csv` with a `Content-Disposition` filename. Used when the device doesn't have what the export needs. `404` for another user's or a purged cascade. |
 | `POST` | `/api/sync` | Body `{ device_id, cursor, page_token?, ops[] }` → `{ results: [{ op_id, status, reason? }], changes: { cascades[], quizzes[], quiz_questions[], quiz_attempts[], preferences?, tombstones[] }, sync_seq, next_page_token?, resync_required? }` |
 
 On the wire, `quiz_questions` changes are grouped per quiz as parallel arrays
@@ -1906,6 +2231,25 @@ An operation on the wire:
 
 Shuffle seeds are sent as decimal strings, because JSON numbers lose precision
 above 2⁵³.
+
+A segment descent and an options change on the wire:
+
+```json
+{ "id": "0192f0c9-…", "device_seq": 119, "at": "2026-09-15T14:41:07.902Z",
+  "type": "finish_segment",
+  "quiz_id": "0192f0a1-…", "attempt": 2, "segment_end": 100,
+  "shuffle_seed": "4519004437287701013", "new_quiz_id": "0192f0c9-…" }
+```
+
+```json
+{ "id": "0192f0d1-…", "device_seq": 120, "at": "2026-09-15T14:41:30.117Z",
+  "type": "set_quiz_options",
+  "quiz_id": "0192f0a1-…", "segment_size": 40 }
+```
+
+`set_cascade_options` and `set_quiz_options` carry only the fields that changed,
+out of `segment_size`, `progression` and `require_alphabetical`; any other field
+is a `400`.
 
 ### Admin
 
@@ -1950,6 +2294,11 @@ Modules:
 - **`lib/sync/`**: the sync engine (triggers, push, paged pull, rebase, backoff,
   `401` handling) and the download manager (card pages, 14-day policy, Keep
   offline, eviction).
+- **`lib/export/`**: builds a word list or CSV from the local stores, in a worker
+  and in chunks, and decides when the export has to come from the server
+  instead. The Rust and TypeScript formatters are held to one set of fixtures in
+  `contract-fixtures/export/`, so the file a device writes and the file the
+  server streams are byte-identical.
 
 Components:
 
@@ -1965,7 +2314,16 @@ Components:
 - **`TileText`**: renders MAGPIE notation, drawing multi-character tiles as
   single joined tiles without brackets.
 - **`CascadeLadder`**: the levels of a cascade, with sizes, attempts, last
-  scores and which level is current.
+  scores, the current run of any segmented level, which level is current, and
+  per-level **Quiz options** and **Export…** actions.
+- **`QuizOptionsForm`**: segment size, progression and alphabetical order, with
+  their inline explanations. The same component serves the cascade builder, the
+  cascade's options dialog and the quiz settings menu; it is told whether it is
+  editing a cascade or a quiz and saves through the matching operation.
+- **`ExportDialog`**: the scope, selection, format and column choices of
+  [Exporting words](#exporting-words), a live count of how many entries the file
+  will hold, and the fallback notice when the export needs data the device does
+  not have.
 - **`PlayerLayout`**: chooses the desktop layout (side rails around the quiz area)
   or the touch layout (top bar, drawer, touch zones) from `pointer: fine` and
   window width.
@@ -1985,7 +2343,9 @@ Components:
   `set_bindings` operation.
 - **`TypedAnagramCard`**: answer input, found counter, found and wrong lists,
   give-up and override controls. It checks entries against the card's answer
-  list locally.
+  list locally, and, when the quiz requires alphabetical order, against the
+  furthest answer entered so far, marking an out-of-order answer and showing the
+  hint for what comes next.
 - **`AnagramAnswerList`**: shared by both anagram modes. Renders words with
   optional hooks and definitions, and highlights unfound words.
 - **`LeaveValue`**: formats a raw value with a sign and the preferred number of
@@ -2161,6 +2521,26 @@ the site data in the browser, because local cursors no longer match.
   - climbing back up
   - restoring into live, cleared and trashed cascades
   - purges
+  - **Drill progression**: a quiz replaced below the threshold, one cleared at or
+    above it, the nothing-correct reset, and a cascade cleared from one level
+  - **Segments**: run boundaries for sizes that do and don't divide the question
+    count; a run with no misses creating nothing; a run with misses creating a
+    Drill quiz one level down and leaving the cursor at the boundary; drilling
+    that quiz down to nothing and coming back to the right run; a segment
+    descent inside a Ladder cascade and inside a Drill one; a segment size at or
+    above the question count behaving like 0; the segment size changing
+    mid-attempt, including to a value that puts the next boundary before a
+    boundary already descended
+  - **Options**: every new quiz taking the cascade's options, a change to a quiz
+    not touching the cascade or its siblings, a change to the cascade not
+    touching existing quizzes, and a segment quiz being Drill in a Ladder cascade
+- **Export tests**: the formatter fixtures in `contract-fixtures/export/` cover
+  all three quiz types, the four selections, both formats, both orderings,
+  multi-character tiles in MAGPIE notation, CSV quoting of definitions with
+  commas and quotes, and the cascade-wide definition of correct and missed across
+  several active quizzes. A Rust test and a Vitest test run the same fixtures, and
+  an integration test checks that `GET /api/cascades/:id/export` returns the same
+  bytes for the same request.
 - **Zyzzyva parity** (local only, needs licensed data): a script runs a
   checked-in list of saved searches against a real CSW24 upload and compares
   the word lists with exports from Zyzzyva for the same searches. Differences
@@ -2189,6 +2569,12 @@ the site data in the browser, because local cursors no longer match.
   - Purges produce tombstones, and a cursor older than `sync_floor_seq` gets
     `resync_required`.
   - A device-created quiz id that already exists is rejected.
+  - A repeated `finish_segment` for the same quiz, attempt and boundary is
+    applied once, and two devices racing on one boundary produce one drill quiz.
+  - `finish_segment` is rejected for a quiz with no segment size, for a boundary
+    that is not a multiple of it, for one at or past the question count, and for
+    one with ungraded questions before it.
+  - Options operations keep each field's latest change across two devices.
   - A 300,000-question `finish` and reset complete within budget.
 - **Other integration tests** (`cargo test`, `TEST_DATABASE_URL`) drive the real
   router in-process, covering:
@@ -2201,6 +2587,10 @@ the site data in the browser, because local cursors no longer match.
   - cascade creation for all three types, Start over, and card pages
   - the cascade limit, including trashed cascades counting toward it and two
     simultaneous creations competing for the last slot
+  - creating a cascade with each combination of quiz options, and the Source
+    quiz carrying the copy
+  - every export endpoint selection, for all three quiz types, including an
+    export of a quiz in the Trash and a `404` for another user's cascade
   - the purge task, including two instances running it at the same time
   - one user being unable to reach another's cascades through REST or sync
   - the application-level invariants listed under [Schema](#schema)
@@ -2236,6 +2626,19 @@ the site data in the browser, because local cursors no longer match.
     Log in to sync, log in, and see the work synced.
   - Switch to typed mode: a wrong entry grades missed, finding every anagram
     grades correct, and Enter on an empty input reveals the answer.
+  - With **alphabetical order** on, entering answers in order grades correct, an
+    out-of-order answer is marked out of order, joins the found list and grades
+    the card missed, and a later in-order answer after it is accepted normally.
+    With the option off, the same sequence grades correct.
+  - **Segments and progression:** create a cascade with a segment of 5 and finish
+    the first run with misses, see the drill level, clear it down to nothing,
+    come back to run 2 at the right question, and finish the quiz. Switch a
+    cascade to Drill, finish below the threshold, and see the quiz replaced at
+    the same level instead of a new level appearing. Change a quiz's segment size
+    from the settings menu mid-attempt and see the next boundary move.
+  - **Export:** download the missed words of a level as a word list and the whole
+    cascade as a CSV, offline, and check the contents; then ask for definitions
+    that were never downloaded, while offline, and see the fallback notice.
   - Turn on hooks and definitions, and see them in anagram answers.
   - **Desktop controls:**
     - Left click shows and advances, right click toggles, and middle click goes
@@ -2272,18 +2675,20 @@ the site data in the browser, because local cursors no longer match.
 4. **Search engine**: all 21 filters, including both limits, validation errors,
    unit, property and parity tests, `/api/search/preview`.
 5. **Cascade builder**: filter rows, applicability rules, tile palette, word list
-   editor, live preview, saved searches, clear threshold, `POST /api/cascades`,
-   card pages.
+   editor, live preview, saved searches, clear threshold, quiz options,
+   `POST /api/cascades`, card pages.
 6. **Cascade rules**:
-   - the Rust and TypeScript rule modules, the deterministic shuffle, and the
-     shared test vectors
+   - the Rust and TypeScript rule modules, including progression and segments,
+     the deterministic shuffle, and the shared test vectors
    - the sync endpoint, operations, conflicts, tombstones and the purge task
 7. **Local-first player**:
    - IndexedDB stores, the outbox and the sync engine
    - service worker, downloads and eviction
    - the player (desktop layout and configurable controls, touch zones,
-     flashcard and typed modes, the ladder, finish banners, preferences menu)
+     flashcard and typed modes with alphabetical order, the run indicator, the
+     ladder, finish and run banners, preferences and quiz options menu)
    - the cascades and trash pages
+   - exporting word lists, on the device and from the server
    - the offline Playwright journeys and the 300,000-question scale tests
 8. **Production**: SES, ACM, deploy pipeline, backups and alarms, first catalog
    upload, restore drill.
