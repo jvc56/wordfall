@@ -17,7 +17,7 @@ There are three quiz types:
 | **Definition** | A word, e.g. `QAT` | That word's definition, e.g. `an evergreen shrub [n -S]` |
 | **Leave Value** | An alphabetized set of 1–6 tiles, e.g. `?EIRS` | The leave's value, e.g. `+34.1` |
 
-Twenty of the filters match search conditions in Zyzzyva
+Most of the filters match search conditions in Zyzzyva
 (<https://github.com/scrabblewords/collins-zyzzyva>), so experienced players can
 describe a word list the way they already know how. There is one Wordfall-only
 filter, **Leave Value**, for Leave Value quizzes. [Filters](#filters) below
@@ -45,9 +45,10 @@ just what was answered correctly or missed. See
 
 A cascade's Source quiz can hold up to **300,000 questions**.
 
-Once a cascade has been downloaded, studying works **offline**: a user can log
-in and start a cascade, board a plane, keep studying, and have everything sync
-when they land. See [Offline and Sync](#offline-and-sync).
+Creating a cascade needs a connection, because the search runs on the server.
+After that, a downloaded cascade works entirely **offline**: a user can keep
+studying, finish levels, go down and climb back up with no connection, and have
+everything sync when the device is back online. See [Offline and Sync](#offline-and-sync).
 
 ---
 
@@ -56,7 +57,7 @@ when they land. See [Offline and Sync](#offline-and-sync).
 | Term | Meaning |
 |---|---|
 | **Cascade** | Everything built from one set of filters: the Source quiz and every level quiz that comes from it. |
-| **Source quiz** | The quiz created from the filter search. It is the first quiz at Level 1. |
+| **Source quiz** | The quiz created from the filter search. It is the permanent quiz at Level 1 and is never cleared: it resets instead. |
 | **Level** | A position in the cascade, numbered from 1. Each level has at most one active quiz. The **deepest level** is the only one that can be played. |
 | **Attempt** | One pass through a quiz's questions. A quiz that is reset starts a new attempt with a new shuffle. |
 | **Segment** (or **run**) | A fixed-size run of questions inside an attempt, the length of one sitting. Finishing a run drills its misses before the attempt goes on. Off by default. |
@@ -64,7 +65,7 @@ when they land. See [Offline and Sync](#offline-and-sync).
 | **Clear threshold** | The score (X%) needed to clear a quiz. It is set per cascade when the cascade is created. |
 | **Quiz options** | Segment size, progression and alphabetical order. They are held by the cascade, copied to each new quiz, and editable on either. |
 | **Progression** | What finishing a quiz below the clear threshold does: **Ladder** (keep the quiz and go down a level) or **Drill** (replace the quiz with its misses). |
-| **Clear** | Finish an attempt with a score of at least the clear threshold. The quiz goes to the Trash. |
+| **Clear** | Finish an attempt with a score of at least the clear threshold. The quiz goes to the Trash, except the Source quiz, which resets instead. |
 | **Trash** | Cleared quizzes and trashed cascades. They can be restored until they are **purged** (deleted permanently) after the trash retention period (Y days, a server setting that defaults to 30). |
 
 ---
@@ -83,9 +84,26 @@ When the user finishes an attempt at the deepest level N, with score
 | Result | What happens | Where the user goes next |
 |---|---|---|
 | **Score ≥ threshold, some misses** | Level N's quiz is **cleared** (to the Trash). A new quiz of the missed questions takes its place at Level N. | The new Level N quiz |
-| **Score ≥ threshold, no misses** | Level N's quiz is **cleared** (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **cleared**. |
+| **Score ≥ threshold, no misses** | Level N's quiz is **cleared** (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **complete**. |
 | **Score < threshold, some correct** | Level N's quiz stays, **reset** to a new attempt with a new shuffle. A new quiz of the missed questions is created at **Level N + 1**. | Down to Level N + 1 |
 | **Score < threshold, nothing correct** | Level N's quiz is **reset** to a new attempt with a new shuffle. No new level is created, because it would be an identical copy of Level N. | The reset Level N quiz |
+
+The **Source quiz** is the one exception, and it applies whatever the
+progression. The Source quiz is never cleared, never replaced and never goes to
+the Trash on its own: it is the cascade, and the whole word list stays one
+finish away for as long as the cascade exists. Finishing it does this instead:
+
+| Result at the Source quiz | What happens | Where the user goes next |
+|---|---|---|
+| **Score ≥ threshold, some misses** | The Source quiz is **reset** to a new attempt with a new shuffle. A new quiz of the missed questions is created at **Level 2**. | Down to Level 2 |
+| **Score ≥ threshold, no misses** | The Source quiz is **reset** to a new attempt with a new shuffle, and the cascade is **complete**: the user sees the completion screen and can start the reset Source quiz again whenever they like. | The reset Source quiz |
+| **Score < threshold, some correct** | Unchanged: the Source quiz is **reset**, and its misses become a new quiz at **Level 2**. | Down to Level 2 |
+| **Score < threshold, nothing correct** | Unchanged: the Source quiz is **reset** in place. | The reset Source quiz |
+
+So above the threshold with misses, the Source quiz behaves exactly as it does
+below the threshold; the only thing the threshold decides at Level 1 is whether
+the attempt is recorded as a pass and whether a perfect attempt completes the
+cascade.
 
 Why these rules hold together:
 
@@ -153,7 +171,7 @@ Progression decides what a finish below the clear threshold does:
 | Progression | Finishing below the clear threshold |
 |---|---|
 | **Ladder** (default) | The table above: Level N's quiz stays, reset and reshuffled, and its misses become a new quiz at Level N + 1. The user has to come back and clear Level N before the cascade is done. |
-| **Drill** | Level N's quiz is finished and goes to the Trash whatever the score, and a new quiz of its missed questions takes its place at Level N. The cascade never grows a level from a finish. |
+| **Drill** | Level N's quiz is finished and goes to the Trash whatever the score, and a new quiz of its missed questions takes its place at Level N. The cascade never grows a level from a finish, except the first one below the Source quiz. |
 
 So with Drill, the score decides nothing about where the user goes; only the
 misses do:
@@ -161,8 +179,14 @@ misses do:
 | Result | What happens | Where the user goes next |
 |---|---|---|
 | **Some correct, some missed** (any score) | Level N's quiz is finished (to the Trash). A new quiz of the missed questions takes its place at Level N. | The new Level N quiz |
-| **No misses** | Level N's quiz is finished (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **cleared**. |
+| **No misses** | Level N's quiz is finished (to the Trash). Level N is removed. | Back up to Level N − 1's quiz. If N was 1, the cascade is **complete**. |
 | **Nothing correct** | Level N's quiz is **reset** to a new attempt with a new shuffle. Nothing is created, because the replacement would be an identical copy. | The reset Level N quiz |
+
+The Source quiz keeps its exception under Drill too: it is reset instead of
+replaced, and because it cannot be replaced at Level 1, its misses become a new
+quiz at **Level 2**. That is the only level a Drill cascade ever grows; Level 2
+then replaces itself at Level 2 in the usual Drill way, and clearing it with no
+misses comes back up to the reset Source quiz.
 
 - The clear threshold is still recorded with the attempt, and the attempt's
   outcome is `cleared` when the score met it and `replaced` when it did not, so
@@ -236,24 +260,26 @@ Moving on from the last question of a run that is not the last run:
 - **Finished quizzes** go to the Trash automatically, labelled with their
   cascade, level and final score, and with whether the score cleared the quiz or
   it was replaced under [Drill progression](#progression-ladder-or-drill).
-- **A cleared cascade** (Level 1 cleared with no misses) goes to the Trash with
-  its last cleared quiz, and the user sees a completion screen showing how many
-  levels and attempts it took.
+- **A completed cascade** (the Source quiz finished at or above the threshold
+  with no misses) is not trashed. The Source quiz is reset and waits, and the
+  user sees a completion screen showing how many levels and attempts it took.
+  The cascade goes to the Trash only when the user trashes it.
 - **Trashing a cascade manually** (e.g. "I'm done with this word list") moves the
   whole cascade to the Trash with its levels as they are.
 - **Restoring a finished quiz** pushes it back onto its cascade as the **new
   deepest level**, starting a fresh attempt with a new shuffle and a fresh copy
   of the cascade's current [quiz options](#quiz-options), so it is the
-  next thing the user studies. If the cascade had been cleared or trashed, it
-  comes back too, with the restored quiz at Level 1 if nothing else is left.
-  Restoring never merges quizzes and never leaves a gap in the levels.
+  next thing the user studies. If the cascade had been trashed, it comes back
+  too, with its Source quiz at Level 1 and the restored quiz below it. Restoring
+  never merges quizzes and never leaves a gap in the levels.
 - **Restoring a manually trashed cascade** brings it back exactly as it was.
 - **Purging** happens after the trash retention period: a cleared quiz is purged
   that long after it was cleared, and a trashed cascade that long after it was
   trashed. Purging a cascade purges every quiz in it. Users can also purge from
   the Trash immediately with **Delete forever**.
-- **Start over** on a cleared cascade creates a new cascade with the same
-  filters, threshold and [quiz options](#quiz-options).
+- **Start over** on a completed cascade creates a new cascade with the same
+  filters, threshold and [quiz options](#quiz-options). It is only a shortcut:
+  the completed cascade's own Source quiz is already reset and playable.
 - **Exporting** works on anything in the Trash that has not been purged, so a
   cleared quiz can still be downloaded as a word list (see
   [Exporting words](#exporting-words)).
@@ -283,7 +309,7 @@ period or with **Delete forever**.
 Every page except the landing, login, registration, email confirmation and
 password reset pages requires a logged-in user. An account is a username, an
 email address and a password. Some accounts are **admins**, who can also upload
-and delete catalog data (see [Admin](#admin)). See
+and delete catalog data that no active cascade uses (see [Admin](#admin)). See
 [Authentication](#authentication).
 
 ### Preferences
@@ -307,7 +333,10 @@ never changes a cascade that already exists.
 | **Show definitions with anagrams** | Anagram answers | off | on / off |
 | **Show hooks with anagrams** | Anagram answers | off | on / off |
 | **Anagram answer mode** | Anagram quizzes | **Flashcard** | Flashcard / Typed |
-| **Controls** | Desktop quiz area | Show / Next: left click or Space · Toggle grade: right click or `X` · Previous: middle click or Backspace | Up to three bindings per action: any mouse button, wheel direction or key, with modifiers. See [Controls](#controls). |
+| **Mouse shortcuts** | Desktop quiz area | On | Off turns every mouse binding inert without forgetting it. See [Controls](#controls). |
+| **Keyboard shortcuts** | Player page | On | Off turns every key binding inert without forgetting it. See [Controls](#controls). |
+| **Show answers found** | Typed-mode Anagram quizzes | Off | Shows `X of Y found` above the input. Off keeps the number of answers hidden. |
+| **Controls** | Desktop quiz area | Show / Next: Mouse 1 or `,` · Toggle grade: Mouse 2 or `M` · Previous: Mouse 3 or `J` | Up to three bindings per action in each set: any mouse button, wheel direction or key, with modifiers. See [Controls](#controls). |
 
 Question order is **not** a preference: questions are always shuffled.
 
@@ -324,29 +353,29 @@ because searching runs on the server.
    dropdown, and inputs that change with the type. The dropdown only lists filters
    that apply to the chosen quiz type (see the
    [applicability table](#filter-applicability-by-quiz-type)). The Not checkbox
-   is disabled for filters that do not support negation. All rows must match;
-   the filters are ANDed together. For distributions whose tiles are not all
+   is disabled for filters that do not support negation. Every row after the
+   first also has a **join** dropdown, **and** or **or**, saying how it joins the
+   row above; **and** is the default, so a list of plain rows still means "all of
+   these must match". See [Combining filters](#combining-filters-and-and-or). For
+   distributions whose tiles are not all
    plain A–Z, a **tile palette** under each tile input inserts tiles by
    clicking.
-4. **Load Search… / Save Search…**: save the current filter rows under a name,
-   or load a saved set. A saved search stores only the filters, never the
-   results, so it can be reused with any lexicon.
-5. **Clear threshold**: prefilled from the user's default.
-6. **Quiz options**: segment size, progression and alphabetical order, each
+4. **Clear threshold**: prefilled from the user's default.
+5. **Quiz options**: segment size, progression and alphabetical order, each
    prefilled from the user's defaults. They are explained inline ("a segment of
    40 means you study 40 at a time and drill what you missed before going on")
    and can be changed later on the cascade and on any individual quiz. See
    [Quiz options](#quiz-options). The alphabetical-order option is shown for
    Anagram cascades only, since nothing else has typed answers, but it is stored
    whatever the type.
-7. **Cascade name**: optional. It defaults to a summary of the filters, such as
+6. **Cascade name**: optional. It defaults to a summary of the filters, such as
    `CSW24 · Length 7–7 · Probability Order 1–1000`.
-8. **Preview**: runs the search as filters change (debounced) and shows how many
+7. **Preview**: runs the search as filters change (debounced) and shows how many
    questions it matches plus the first few, so the user can adjust before
    committing. The form shows inline errors for invalid rows, such as a
    malformed pattern, a tile not in the distribution, or min > max. Searches
    with more than 300,000 results say so and show the count.
-9. **Create Cascade**: runs the search, shuffles the questions into the Source
+8. **Create Cascade**: runs the search, shuffles the questions into the Source
    quiz, saves the cascade, starts downloading it for offline use, and goes
    straight to the first card. At the [cascade limit](#cascade-limit) the button
    is disabled, with an explanation.
@@ -459,11 +488,16 @@ quizzes work by default (**flashcard mode**). The answer that Show / Next reveal
 
 #### Typed mode (Anagram quizzes only)
 
-- The question shows `0 of 9 found` with a focused text input.
+- The question shows a focused text input. With the **Show answers found**
+  [preference](#preferences) on, a counter above it reads `0 of 9 found`. The
+  preference is **off by default**, because the total is itself a hint: knowing
+  an alphagram has nine anagrams tells the user to keep looking. With it off,
+  the found list still grows as answers are entered, but neither the count nor
+  the total is shown.
 - The user types a word and presses **Enter**. Input is upper-cased, trimmed,
   and converted to tiles (see [Tiles](#tiles)).
   - A word that is **one of the answers and not yet entered** joins the found
-    list, shown in alphabetical order, and the counter goes up.
+    list, shown in alphabetical order, and the counter, if shown, goes up.
   - A word **already entered** is ignored, with a brief "already entered" note.
   - Any other word is **wrong**. It is listed in red under the input, and the
     question will be graded missed.
@@ -496,21 +530,32 @@ quizzes work by default (**flashcard mode**). The answer that Show / Next reveal
 
 #### Controls
 
-The default desktop bindings are:
+The player has two independent sets of shortcuts, **mouse shortcuts** and
+**keyboard shortcuts**. Both are user settings, and **both are on by default**.
+Either can be turned off on its own in **Controls**, on the Account page and in
+the player's preferences menu; turning a set off makes its strokes inert without
+forgetting how they are bound, so turning it back on restores them. Both sets
+are configurable. With both off, the player is driven by the on-screen buttons
+and the touch zones only, and Controls says so.
 
-| Action | Mouse (in the quiz area) | Keyboard |
+The defaults are:
+
+| Action | Mouse shortcut (in the quiz area) | Keyboard shortcut |
 |---|---|---|
-| **Show / Next** | Left click | Space |
-| **Toggle grade** | Right click | `X` |
-| **Previous** | Middle click | Backspace |
+| **Show / Next** | Mouse 1 (left) | `,` |
+| **Toggle grade** | Mouse 2 (right) | `M` |
+| **Previous** | Mouse 3 (middle) | `J` |
 
-- **What can be bound.** Each action can have up to three bindings. A binding
-  can be:
-  - a mouse button: left, middle, right, back or forward
+`,`, `M` and `J` sit under the right hand on a home-row grip, so a user can work
+through a quiz without looking down and without leaving the mouse.
+
+- **What can be bound.** Each action can have up to three bindings in each set.
+  A mouse binding can be:
+  - a mouse button: 1 (left), 2 (right), 3 (middle), 4 (back) or 5 (forward)
   - a wheel direction: up or down
-  - any key
 
-  Each can be combined with any mix of Ctrl, Shift, Alt and Meta.
+  A keyboard binding is any key. Either can be combined with any mix of Ctrl,
+  Shift, Alt and Meta.
 - **Where bindings act.** Mouse and wheel bindings act only inside the quiz
   area. Key bindings act anywhere on the player page except text fields outside
   the quiz area, such as the preferences menu.
@@ -520,8 +565,9 @@ The default desktop bindings are:
   capture and cannot itself be bound.
 - **Rules.**
   - A stroke can belong to only one action; binding it to another action moves
-    it there, with a notice.
-  - Every action must keep at least one binding.
+    it there, with a notice. Mouse and keyboard strokes never collide with each
+    other, so `M` and Mouse 2 are unrelated.
+  - Every action must keep at least one binding in each enabled set.
   - **Reset to defaults** restores the table above.
 - **Keyboard layouts.** Keys are recorded by physical position
   (`KeyboardEvent.code`) and displayed using the user's keyboard layout where
@@ -531,7 +577,8 @@ The default desktop bindings are:
   buttons. The capture box warns when a stroke is one of these.
 - **Wheel bindings** act at most once every 150 ms, so one flick of the wheel is
   one action.
-- **Sync.** Bindings sync across devices along with the other preferences.
+- **Sync.** Bindings and the two on/off settings sync across devices along with
+  the other preferences.
 
 #### Touch zones
 
@@ -596,8 +643,8 @@ Details:
 - **Typed mode.** The on-screen keyboard covers the zones, so while it is open a
   row of three buttons sits just above it: Previous, Show / Next, Toggle, in the
   same left-to-right order as landscape.
-- **Customization.** The zones are fixed; only mouse and keyboard controls can
-  be customized.
+- **Customization.** The zones are fixed and always active; only the mouse and
+  keyboard shortcuts can be customized or turned off.
 
 #### Saving progress
 
@@ -617,8 +664,13 @@ happened:
   Down to Level 3 with 18 missed questions.` (Ladder progression)
 - `Level 2: 64%. Replaced with its 18 missed questions.` (Drill progression)
 - `Level 2: 0%. Reshuffled. Try again.`
-- `Cascade cleared in 4 levels and 9 attempts.` This one leads to the completion
-  screen, which offers **Start over** and **Back to cascades**.
+- `Level 1: 92%, and every question right. Cascade complete in 4 levels and 9
+  attempts.` This one leads to the completion screen, which offers **Study it
+  again** (the reset Source quiz), **Start over** (a fresh cascade with the same
+  filters) and **Back to cascades**.
+- `Level 1 cleared with 87%. Down to Level 2 with its 5 missed questions.` The
+  Source quiz is reset instead of cleared, so a pass with misses still goes
+  down.
 
 Moving on from the last card of a **run** that is not the last run does not
 finish anything; it drills that run's misses (see [Segments](#segments)) and
@@ -665,9 +717,13 @@ What ends up in the file, per quiz type:
 
 - Entries are written in the quiz's shuffled order for a quiz export, and in
   search order for a cascade export; the dialog offers **alphabetical instead**.
-- [Tiles](#tiles) are written in MAGPIE notation, so a multi-character tile
-  round-trips (`A[NY]S`), and files are UTF-8 with a trailing newline. CSV is
-  RFC 4180 with a header row.
+- [Tiles](#tiles) are written plainly, with no brackets (`ANYS`), the same way
+  they are shown on screen, so an export reads as a word list rather than as
+  notation. Files are UTF-8 with a trailing newline, and CSV is RFC 4180 with a
+  header row. Pasting an export back into an In Word List filter re-splits it by
+  greedy matching (see [Tiles](#tiles)), which recovers the original tiles for
+  every word whose letters do not also spell a different tiling; the tile
+  palette is there for those rare entries.
 - The file is named after the source, e.g. `CSW24 7s — L2 missed.txt`, with
   characters that filenames can't hold replaced.
 
@@ -687,7 +743,7 @@ export the questions alone, which never needs anything but local data.
 
 Admins manage the catalog from `/admin`. It lists every letter distribution,
 lexicon and leave value set, with its size, uploader, upload time and how many
-cascades and saved searches reference it. Admin status is the `users.is_admin`
+cascades reference it. Admin status is the `users.is_admin`
 flag. **No endpoint can set it**; it is granted with SQL (`scripts/dev.py` does
 this for the local dev user), so no bug in the web API can create an admin.
 
@@ -834,15 +890,26 @@ corrected word list is a new lexicon with a new name (`CSW24` → `CSW24-fixed` 
 downloaded answers be cached forever, and makes re-running a stored search always
 give the same questions.
 
-An admin can delete an item only when nothing references it. The foreign keys
-enforce this, and the admin page disables the delete button and explains what is
-still using the item:
+An admin can delete an item once **no active cascade or quiz** references it.
+Only live study counts: a cascade in the Trash, and a cleared quiz waiting to be
+purged, do not hold an item back. The admin page disables the delete button and
+explains what is still using the item:
 
 - **A letter distribution** is in use while any lexicon refers to it.
-- **A lexicon** is in use while it has leave values, or while any cascade or In
-  Lexicon filter refers to it.
-- **A lexicon's leave values** are in use while any Leave Value cascade refers
-  to them.
+- **A lexicon** is in use while it has leave values, or while any active cascade
+  or In Lexicon filter refers to it.
+- **A lexicon's leave values** are in use while any active Leave Value cascade
+  refers to them.
+
+Deleting an item that only trashed cascades and cleared quizzes reference purges
+them in the same transaction, exactly as
+[purging](#trash-restore-and-purge) would: their quizzes, questions, attempts and
+question indexes are deleted, tombstones are written, and each owner's sync
+sequence is bumped, so every device drops them on its next pull. The refusal and
+the confirmation both name what will go: `Deleting CSW24 will also delete 3
+trashed cascades belonging to 2 users. 1 active cascade still uses it, so it
+cannot be deleted yet.` Deleting an unreferenced lexicon or leave value set
+cascades to its words or values as before.
 
 ### Loading changes into running servers
 
@@ -871,8 +938,13 @@ distributions.
   multi-character tiles in square brackets: `A[NY]S`, `?A[L·L]`. The notation is
   unambiguous. In MAGPIE, lower-case tiles (a tile's `blank_letter`) mean a blank
   standing for that tile. Wordfall never stores them.
-- **Display** shows each tile's `letter` without brackets. A multi-character
-  tile is drawn as one joined tile, so `ANYS` visibly reads as three tiles.
+- **Display never uses brackets.** Everywhere a tile sequence is shown to a
+  user — questions, answers, alphagrams, leaves, the ladder, cascade names,
+  banners, exports — each tile is shown as its plain `letter`, so a Catalan
+  word reads `ANYS`, not `A[NY]S`. A multi-character tile is drawn as one
+  joined tile, with the letters of a tile kept together when a line wraps, so
+  `ANYS` still visibly reads as three tiles. Brackets belong to MAGPIE
+  notation, which is for upload files, stored keys and the API only.
 - **Typed text** in filter inputs, In Word List entries and typed-mode answers
   is converted to tiles in three steps:
   1. Upper-case it.
@@ -886,8 +958,8 @@ distributions.
   plainly or inserted from the tile palette. Palette tiles are inserted whole and
   never re-split. That is how to enter a sequence that greedy matching would
   otherwise join, such as a separate `N` followed by `Y`.
-- **Blank.** Written and displayed as `?`. In filter inputs `?` means "any tile",
-  so a literal blank is typed as `_`.
+- **Blank.** Written and displayed as `?`. In filter inputs `?` (and its synonym
+  `.`) means "any tile", so a literal blank is typed as `_`.
 - **Vowels and point values** come from the distribution, so Number of Vowels,
   Consists of `AEIOU`-style sets, Point Value and probability all work for any
   language.
@@ -898,8 +970,9 @@ Words and leaves both use the **lexicon's** letter distribution.
 
 ## Filters
 
-There are 21 filters: 20 of Zyzzyva's condition types, in the order of its
-search dropdown, plus Wordfall's **Leave Value** filter at the end. Zyzzyva's
+There are 23 filters: 20 of Zyzzyva's condition types, in the order of its
+search dropdown, then Wordfall's **Leave Value** filter and the two **inner
+hook** filters. Zyzzyva's
 Belongs to Group condition is deliberately left out; the other filters are
 enough to build any study list. A filter has a type, a Not flag, and
 parameters, and it is either a **predicate** or a **limit**:
@@ -920,13 +993,17 @@ plus:
 
 | Token | Meaning |
 |---|---|
-| `?` | Any single tile |
+| `?` or `.` | Any single tile. The two are identical; `.` is accepted because Zyzzyva users and regular-expression habits both reach for it. Patterns are stored normalized to `?`. |
 | `*` | Any number of tiles, including none. More than one `*` in an anagram or subanagram pattern means the same as one. |
 | `[ABC]` | Exactly one tile from the set |
 | `_` | A literal blank (Leave Value quizzes only) |
 
 Input is upper-cased as it is typed and converted to tiles, with multi-character
 tiles matched greedily or inserted from the tile palette (see [Tiles](#tiles)).
+Every `.` outside a bracket set is read as `?` before matching, so a
+distribution can still have a tile written with a `.`-free `letter` only; `.`
+inside a bracket set is a literal member of that set only if the distribution
+has such a tile, and is otherwise a validation error.
 Brackets in a pattern always mean a tile set, never MAGPIE's multi-character
 notation, so `[A NY]` and `[ANY]` both mean "`A` or `NY`" in a Catalan lexicon.
 A tile that is not in the distribution, an unbalanced bracket, or an empty
@@ -961,6 +1038,8 @@ tiles.
 | 19 | **Consists of** | tiles, min %, max % | — | `floor(100 × (tiles of the word that are in the set) / length)` is within min–max. Example: `AEIOU`, 70–100 finds words that are at least 70% vowels. |
 | 20 | **Number of Anagrams** | min, max | — | The number of valid words with this word's alphagram (including itself) is within min–max. |
 | 21 | **Leave Value** *(Wordfall only)* | min, max (decimals; either may be blank) | — | *Leave Value quizzes only.* The leave's stored value is between min and max, inclusive. A blank bound is open, so `min 10, max blank` means "worth at least 10". At least one bound is required, and min ≤ max when both are given. The comparison uses the full stored value, not the rounded display value. |
+| 22 | **Has Inner Front Hook** | — | ✓ | The word with its **first** tile removed is also a valid word in the cascade's lexicon, so the word is a front hook of a shorter word. `SHEAR` qualifies because `HEAR` is valid; `SHEAF` does not, because `HEAF` is not a word. Negated, it finds words whose first tile cannot be dropped. A one-tile word never qualifies. |
+| 23 | **Has Inner Back Hook** | — | ✓ | The word with its **last** tile removed is also a valid word. `HEARS` qualifies because `HEAR` is valid. Negated, it finds words whose last tile cannot be dropped. A one-tile word never qualifies. |
 
 Details that are easy to get wrong:
 
@@ -979,8 +1058,39 @@ Details that are easy to get wrong:
   neighbours with an equal value. If several limit rows of the same kind (and
   the same blank count) are given, the ranges intersect: the highest min and the
   lowest max.
-- **Several rows of one type** are simply ANDed. Two Length rows intersect; two
-  Includes Letters rows both have to hold.
+- **Several rows of one type** are combined like any other rows. Two Length rows
+  joined with **and** intersect; two Includes Letters rows joined with **and**
+  both have to hold.
+
+### Combining filters: AND and OR
+
+Each row after the first carries a **join** to the row above, either **and** or
+**or**. **And binds tighter than or**, so the rows read as a list of
+or-separated groups, each group a run of and-joined rows: a word matches when it
+matches every row of at least one group. There are no parentheses and no
+nesting; two levels cover the study lists people actually build, and a flat list
+of rows with a join on each one stays readable.
+
+```
+Length 7–7                    ← group 1
+and  Includes Letters  Q      ← group 1
+or   Length 8–8               ← group 2
+and  Includes Letters  Z      ← group 2
+```
+
+matches seven-letter words with a `Q` together with eight-letter words with a
+`Z`.
+
+- **Not** negates its own row only, never a group.
+- **Limit rows** (Limit by Probability Order, Limit by Playability Order) are not
+  predicates: they rank whatever survived and keep a slice, and they are always
+  applied last to the whole result. A limit row therefore cannot be joined with
+  **or**; the builder disables the choice on those rows and explains why. Several
+  limit rows still intersect as before.
+- **An empty group is impossible**: removing the only row of a group removes the
+  group, and the first row of the list never shows a join.
+- The generated cascade name summarizes groups with `or` between them, e.g.
+  `CSW24 · Length 7–7 + Q  or  Length 8–8 + Z`.
 
 ### Probability and probability order
 
@@ -1012,7 +1122,8 @@ Zyzzyva does, and the limited words are then collapsed to alphagrams.
 question.
 
 **Leave Value quizzes** search over the **lexicon's leave values**. A leave has
-no word-only attributes (validity, definition, playability, hooks), so filters
+no word-only attributes (validity, definition, playability, hooks, inner
+hooks), so filters
 that depend on those do not apply. Leave probability uses the lexicon's letter
 distribution, with the blank treated as an ordinary tile.
 
@@ -1033,6 +1144,7 @@ distribution, with the blank treated as an ordinary tile.
 | Consists of | ✓ | ✓ | ✓ |
 | Number of Anagrams | ✓ | ✓ | ✓ (valid words in the lexicon using exactly the leave's tiles; 0 if the leave contains a blank) |
 | Leave Value | — | — | ✓ |
+| Has Inner Front Hook / Has Inner Back Hook | ✓ | ✓ | — |
 
 Changing the quiz type on the creation form keeps the filter rows that still
 apply and flags the ones that don't, rather than deleting them silently.
@@ -1050,8 +1162,8 @@ Browser
                                    └── wordfall   (Axum; in-memory catalog indexes;
                                          │  ▲      cascade rules; sync; purge task)
                                          ▼  │ LISTEN catalog_changed
-                                    RDS Postgres  (users, preferences, catalog, saved searches,
-                                                   cascades, quizzes, grades, sync bookkeeping)
+                                    RDS Postgres  (users, preferences, catalog, cascades,
+                                                   quizzes, grades, sync bookkeeping)
 ```
 
 - **Postgres is the source of truth** for everything.
@@ -1123,7 +1235,9 @@ in-memory `LexiconIndex`, computing for every word:
   distribution
 - `num_anagrams` (from an alphagram → words map, which also serves Anagram
   answers)
-- `front_hooks` and `back_hooks` (for the hooks display preference)
+- `front_hooks` and `back_hooks` (for the hooks display preference), and
+  `has_inner_front_hook` / `has_inner_back_hook`, each a bit set when the word
+  without its first (or last) tile is itself in the lexicon (filters 22 and 23)
 - `combinations[0..=2]`, `probability_order[b]`, `min_probability_order[b]`
   and `max_probability_order[b]`
 - `playability_order`, `min_playability_order`, `max_playability_order`
@@ -1159,6 +1273,10 @@ never block requests.
 ```rust
 pub struct SearchSpec { pub conditions: Vec<Condition> }
 
+// `join_prev` on each condition after the first makes the list a disjunction of
+// conjunctive groups; `groups()` splits it at every `Or`. Limit conditions are
+// pulled out first and applied to the union.
+
 pub enum ConditionKind {
     AnagramMatch(Pattern), PatternMatch(Pattern), SubanagramMatch(Pattern),
     Length(Range), InLexicon(LexiconId), InWordList(HashSet<TileString>),
@@ -1173,9 +1291,12 @@ pub enum ConditionKind {
     ConsistsOf { tiles: TileSet, min_pct: u8, max_pct: u8 },
     NumAnagrams(Range),
     LeaveValue { min: Option<f64>, max: Option<f64> },
+    HasInnerFrontHook, HasInnerBackHook,
 }
 
-pub struct Condition { pub kind: ConditionKind, pub negated: bool }
+pub struct Condition { pub kind: ConditionKind, pub negated: bool, pub join_prev: JoinOp }
+
+pub enum JoinOp { And, Or }
 
 pub enum Target<'a> { Words(&'a LexiconIndex), Leaves(&'a LeaveSetIndex) }
 
@@ -1193,13 +1314,18 @@ How a search runs:
    negation allowed, ranges, pattern syntax, tiles present in the distribution.
    It returns every error, keyed by row index, so the form can mark each bad
    row.
-2. **Pick candidates.** Words or leaves of the target. If there is a Length
-   row, iterate only the per-length buckets inside its range, and if there is an
-   exact Anagram Match with no `*`, start from the alphagram map. These are
-   shortcuts only; the results must match a full scan.
-3. **Apply predicates** to each candidate, cheapest first: integer and leave
-   value ranges, then tile counts, then patterns, then definition substring
-   scans. It stops at the first failing predicate.
+2. **Pick candidates.** Words or leaves of the target. The shortcuts hold only
+   when **every** group supports them: if each group has a Length row, iterate
+   the union of their ranges' per-length buckets, and if each group has an exact
+   Anagram Match with no `*`, start from the union of those alphagram entries.
+   A single group without such a row means a full scan. These are shortcuts
+   only; the results must match a full scan.
+3. **Apply predicates** to each candidate, one group at a time. Within a group
+   the predicates run cheapest first — integer and leave value ranges, then tile
+   counts, then patterns, then definition substring scans — and stop at the
+   first failure. The candidate is kept as soon as one group accepts it, so
+   groups are tried cheapest-group-first and later groups are skipped. With a
+   single group this is exactly the old behaviour.
 4. **Apply limits** to the survivors, grouped by (kind, blanks), with lax
    widening as described in [Filters](#filters).
 5. **Make questions.** Anagram: dedupe alphagrams. Definition: words.
@@ -1208,10 +1334,10 @@ How a search runs:
 
 Pattern matching:
 
-- **Anagram and Subanagram** compare tile count vectors. `?` and bracket sets
+- **Anagram and Subanagram** compare tile count vectors. `?` (or `.`) and bracket sets
   are matched by a small bipartite assignment: sets are few and short, so a
   greedy most-constrained-first assignment with backtracking is enough.
-- **Pattern Match** compiles to an anchored matcher over tile indexes (`?` → any
+- **Pattern Match** compiles to an anchored matcher over tile indexes (`?`/`.` → any
   one tile, `*` → any run, `[..]` → a tile set). Compiled patterns are cached
   per request.
 
@@ -1271,8 +1397,12 @@ finish(cascade, quiz, grades, shuffle_seed, new_quiz_id) → Outcome
                                                      // quiz to the Trash; replacement at the same
                                                      // level, or none (level removed). `cleared`
                                                      // says whether the score met the threshold.
-    Descended { reset_seed, new_level: NewQuiz }     // Ladder only: quiz reset; new quiz at level + 1
-    Reshuffled { reset_seed }                        // nothing correct; reset in place
+                                                     // Never returned for the Source quiz.
+    Descended { reset_seed, new_level: NewQuiz }     // quiz reset; new quiz at level + 1. Ladder,
+                                                     // and the Source quiz whenever it has misses
+    Reshuffled { reset_seed, completed: bool }       // reset in place: nothing correct, or the
+                                                     // Source quiz with no misses, which also
+                                                     // completes the cascade
 
 next_boundary(quiz) → Option<position>               // smallest multiple of the quiz's segment size
                                                      // above its cursor and below its question count
@@ -1286,7 +1416,8 @@ restore_quiz(cascade, quiz, shuffle_seed) → Restored  // pushed as the new dee
 ```
 
 - `finish` reads the cascade's **progression** to choose between `Finished` and
-  `Descended`, and every quiz these functions create takes its
+  `Descended`, and returns `Descended` or `Reshuffled` for the Source quiz under
+  either progression, because the Source quiz is never cleared, and every quiz these functions create takes its
   [options](#quiz-options) from the **cascade** row, except a segment quiz, which
   is always Drill. Both sides read the same cascade row, so both build the same
   quiz.
@@ -1343,10 +1474,30 @@ Every step involving a quiz's full question set is written for the maximum size:
 |---|---|
 | Logging in, registering, password reset | Opening the app, including after a reload or browser restart |
 | Creating a cascade (search runs on the server) | Studying any downloaded cascade in both answer modes |
-| Start over (creates a new cascade) | Finishing quizzes: clearing, going down, going back up |
-| Saved searches, admin, account changes other than preferences | Trash: restoring quizzes and cascades, Delete forever |
+| Start over (creates a new cascade) | Finishing quizzes: clearing, going down a level, going back up, resetting the Source quiz, and completing a cascade |
+| Admin and account changes other than preferences | Trash: restoring quizzes and cascades, Delete forever |
 | Downloading a cascade's answer cards | Changing preferences, controls and quiz options |
 | Exporting answers or definitions the device has not downloaded | Exporting anything the device already has |
+
+**Creating a cascade is the only part of the cascade life cycle that needs a
+connection.** The search runs on the server against its in-memory lexicon
+indexes, which the device does not have, so `/cascades/new` says so and disables
+**Create Cascade** while offline. Everything that happens to a cascade
+afterwards is local: once the cascade's answer cards are downloaded, the device
+can grade every question, finish a level, go down a level with the misses, clear
+a level and climb back up, reset the Source quiz, and complete the cascade,
+all with no connection. It can do this for as many finishes as the user has
+patience for, because [the cascade rules](#cascade-rules) are pure functions
+that exist in TypeScript as well as Rust, every level's questions come from the
+Source quiz's already-downloaded question index and answer cards, and new quiz
+ids and shuffle seeds are generated on the device. The server replays the same
+operations against the same rules when the device syncs and arrives at the same
+state.
+
+The one thing an offline descent cannot do is pull answer cards it never had:
+a device that went offline mid-download has the cascade marked **partly
+downloaded** and refuses to start a quiz whose cards are missing, rather than
+showing blank answers.
 
 ### On the device
 
@@ -1370,13 +1521,16 @@ never mix:
 | `outbox` | operations not yet accepted by the server, in `device_seq` order |
 
 **Downloads.**
-- A cascade starts downloading the moment it is created. That covers the user
-  who creates one just before boarding.
+- A cascade starts downloading the moment it is created, so a cascade made while
+  the connection is still up is ready to study once it is gone.
 - Every cascade with activity in the last 14 days is kept downloaded, plus any
   cascade the user marks **Keep offline**.
 - The player shows **Available offline** or download progress. While a download
   is still running and the device is online, the player fetches the pages it
-  needs on demand, so studying never waits for a download to finish.
+  needs on demand, so studying never waits for a download to finish. A cascade
+  whose download did not finish before the connection went is shown as **partly
+  downloaded**, and a quiz whose cards are missing cannot be started until the
+  device is online again.
 - Card data above a 500 MB soft limit is evicted, least recently used cascade
   first. Only card data is ever evicted, never unsynced operations.
 - The app calls `navigator.storage.persist()` on first login. The Account page
@@ -1393,13 +1547,13 @@ never mix:
 | `finish_segment` | quiz, attempt, segment end, shuffle seed, new quiz id | the quiz is active, is at the deepest level, the attempt matches, its segment size is greater than 0, the segment end is a multiple of it strictly between 0 and the question count, every question before the segment end is graded, and no quiz already exists for this quiz, attempt and segment end | Create the drill quiz one level down from the run's misses (nothing if there are none) and move the cursor to the segment end. See [Segments](#segments) |
 | `set_cascade_options` | cascade, changed option fields, at | the cascade exists and is not purged | Set the fields (latest `at` wins). Only later quizzes are affected |
 | `set_quiz_options` | quiz, changed option fields, at | the quiz is active | Set the fields (latest `at` wins) |
-| `restore_quiz` | quiz, shuffle seed | the quiz is cleared and not purged | Push it back as the new deepest level; bring back its cascade if needed |
+| `restore_quiz` | quiz, shuffle seed | the quiz is cleared and not purged | Push it back as the new deepest level; bring back its cascade if it was trashed |
 | `trash_cascade` | cascade | the cascade is not trashed | Trash it |
-| `restore_cascade` | cascade | the cascade was trashed manually (not cleared) and not purged | Restore it as it was |
+| `restore_cascade` | cascade | the cascade is trashed and not purged | Restore it as it was |
 | `purge_quiz` | quiz | the quiz is cleared | Delete it permanently and record a tombstone |
 | `purge_cascade` | cascade | the cascade is trashed | Delete it and all its quizzes permanently and record tombstones |
 | `set_preferences` | changed fields, at | always | Set the fields (latest `at` wins) |
-| `set_bindings` | the full list of bindings, at | the list is valid: every action has 1–3 bindings and no stroke is used twice | Replace the bindings (latest `at` wins) |
+| `set_bindings` | the full list of bindings, at | the list is valid: every action has 1–3 bindings in each set and no stroke is used twice | Replace the bindings (latest `at` wins) |
 
 Every operation also carries its `id`, `device_id`, `device_seq` and the device's
 timestamp.
@@ -1453,7 +1607,7 @@ Pushes are sent in batches of up to 500 operations. A batch with a large
 ### Conflicts
 
 Conflicts need **two devices changing the same cascade while at least one is
-offline**. Using one device on a plane never conflicts. The rules:
+offline**. Using a single device never conflicts. The rules:
 
 | Situation | Result |
 |---|---|
@@ -1511,9 +1665,11 @@ CREATE TYPE anagram_answer_mode AS ENUM ('flashcard', 'typed');
 CREATE TYPE input_action AS ENUM ('show_next', 'toggle_grade', 'previous');
 
 CREATE TYPE input_kind AS ENUM ('mouse_button', 'wheel', 'key');
+CREATE TYPE join_op AS ENUM ('and', 'or');
+CREATE TYPE input_set AS ENUM ('mouse', 'keyboard');
 
 -- 'cleared' means finished and in the Trash, whether or not the score met the
--- clear threshold (see Progression).
+-- clear threshold (see Progression). The Source quiz is never 'cleared'.
 CREATE TYPE quiz_status AS ENUM ('active', 'cleared');
 
 -- What a finish below the clear threshold does.
@@ -1525,16 +1681,18 @@ CREATE TYPE quiz_origin AS ENUM (
     'clear_replacement',  -- the misses of a cleared quiz, at the same level
     'drill_replacement',  -- Drill progression: the misses of a quiz that was not cleared,
                           -- at the same level
-    'descent',            -- Ladder progression: the misses of a quiz that was not cleared,
-                          -- one level down
+    'descent',            -- the misses of a quiz that was reset rather than cleared, one level
+                          -- down: Ladder progression, or any finish of the Source quiz with misses
     'segment'             -- the misses of one run of a quiz, one level down
 );
 
 CREATE TYPE finish_outcome AS ENUM (
     'cleared',     -- score met the threshold; quiz to the Trash
     'replaced',    -- Drill: score did not meet the threshold; quiz to the Trash anyway
-    'descended',   -- Ladder: quiz reset, misses one level down
-    'reshuffled'   -- nothing correct; quiz reset in place
+    'descended',   -- quiz reset, misses one level down: Ladder, or the Source quiz with misses
+    'reshuffled',  -- nothing correct; quiz reset in place
+    'completed'    -- the Source quiz, at or above the threshold with no misses: reset in place
+                   -- and the cascade is complete
 );
 
 CREATE TYPE sync_op_type AS ENUM (
@@ -1568,7 +1726,9 @@ CREATE TYPE condition_type AS ENUM (
     'definition',
     'consists_of',
     'num_anagrams',
-    'leave_value'
+    'leave_value',
+    'has_inner_front_hook',
+    'has_inner_back_hook'
 );
 
 CREATE TYPE part_of_speech AS ENUM (
@@ -1635,21 +1795,28 @@ CREATE TABLE user_preferences (
     anagram_show_definitions  BOOLEAN NOT NULL DEFAULT false,
     anagram_show_hooks        BOOLEAN NOT NULL DEFAULT false,
     anagram_answer_mode       anagram_answer_mode NOT NULL DEFAULT 'flashcard',
+    anagram_show_found_count  BOOLEAN NOT NULL DEFAULT false,  -- 'X of Y found' in typed mode
     -- Defaults for new cascades only; changing one never touches an existing cascade.
     default_segment_size      INTEGER NOT NULL DEFAULT 0
                                   CHECK (default_segment_size BETWEEN 0 AND 300000),
     default_progression       quiz_progression NOT NULL DEFAULT 'ladder',
     default_require_alphabetical BOOLEAN NOT NULL DEFAULT false,
+    -- Shortcut sets. Both on by default; off makes that set's bindings inert.
+    mouse_shortcuts_enabled      BOOLEAN NOT NULL DEFAULT true,
+    keyboard_shortcuts_enabled   BOOLEAN NOT NULL DEFAULT true,
     changed_at                TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest change
     bindings_changed_at       TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time of latest binding change
     updated_seq               BIGINT NOT NULL DEFAULT 0           -- also bumped when bindings change
 );
 
--- Desktop controls. The defaults are inserted with the user; every action keeps
--- at least one binding.
+-- Player controls. The defaults are inserted with the user; every action keeps
+-- at least one binding in each set.
 CREATE TABLE user_input_bindings (
     user_id  UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     action   input_action NOT NULL,
+    -- 'mouse' for mouse buttons and the wheel, 'keyboard' for keys. Each set holds
+    -- up to three bindings per action and is enabled or disabled on its own.
+    set      input_set NOT NULL,
     slot     SMALLINT NOT NULL CHECK (slot BETWEEN 0 AND 2),
     kind     input_kind NOT NULL,
     code     TEXT NOT NULL,
@@ -1657,10 +1824,11 @@ CREATE TABLE user_input_bindings (
     shift    BOOLEAN NOT NULL DEFAULT false,
     alt      BOOLEAN NOT NULL DEFAULT false,
     meta     BOOLEAN NOT NULL DEFAULT false,
-    PRIMARY KEY (user_id, action, slot),
+    PRIMARY KEY (user_id, action, set, slot),
     UNIQUE (user_id, kind, code, ctrl, shift, alt, meta), -- one action per stroke
+    CHECK (set = CASE kind WHEN 'key' THEN 'keyboard' ELSE 'mouse' END),
     CHECK (CASE kind
-        WHEN 'mouse_button' THEN code IN ('left', 'middle', 'right', 'back', 'forward')
+        WHEN 'mouse_button' THEN code IN ('1', '2', '3', '4', '5')
         WHEN 'wheel'        THEN code IN ('up', 'down')
         WHEN 'key'          THEN code ~ '^[A-Za-z0-9]{1,32}$'  -- KeyboardEvent.code
                                  AND code <> 'Escape'
@@ -1742,7 +1910,7 @@ CREATE TABLE leave_values (
 );
 
 -- -------------------------------------------------------------------------
--- Filter specifications (shared by saved searches and cascades)
+-- Filter specifications (one per cascade)
 -- -------------------------------------------------------------------------
 
 CREATE TABLE search_specs (
@@ -1755,6 +1923,9 @@ CREATE INDEX search_specs_user_id ON search_specs (user_id);
 CREATE TABLE search_conditions (
     spec_id               UUID NOT NULL REFERENCES search_specs (id) ON DELETE CASCADE,
     position              SMALLINT NOT NULL CHECK (position BETWEEN 0 AND 99),
+    -- How this row joins the row above. Position 0 is always 'and'. 'and' binds
+    -- tighter than 'or', so the rows are a disjunction of conjunctive groups.
+    join_prev             join_op NOT NULL DEFAULT 'and',
     condition_type        condition_type NOT NULL,
     negated               BOOLEAN NOT NULL DEFAULT false,
 
@@ -1847,16 +2018,6 @@ CREATE TABLE search_condition_words (
         REFERENCES search_conditions (spec_id, position) ON DELETE CASCADE
 );
 
-CREATE TABLE saved_searches (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
-    spec_id     UUID NOT NULL UNIQUE REFERENCES search_specs (id),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, name)
-);
-
 -- -------------------------------------------------------------------------
 -- Cascades and quizzes
 -- -------------------------------------------------------------------------
@@ -1869,7 +2030,7 @@ CREATE TABLE cascades (
     lexicon_id        SMALLINT NOT NULL REFERENCES lexicons (id),
     leave_set_id      INTEGER,                    -- Leave Value cascades only
     spec_id           UUID NOT NULL REFERENCES search_specs (id),
-                          -- a private copy, never a saved search's spec
+                          -- a private copy, owned by this cascade
     clear_threshold   SMALLINT NOT NULL CHECK (clear_threshold BETWEEN 0 AND 100),
 
     -- Quiz options: what every quiz created for this cascade starts with.
@@ -1880,19 +2041,21 @@ CREATE TABLE cascades (
     options_changed_at   TIMESTAMPTZ NOT NULL DEFAULT now(), -- device time, for latest-wins
 
     question_count    INTEGER NOT NULL CHECK (question_count BETWEEN 1 AND 300000),
-    depth             INTEGER NOT NULL CHECK (depth >= 0), -- number of active levels
+    depth             INTEGER NOT NULL CHECK (depth >= 1), -- number of active levels; the
+                                                  -- Source quiz is never cleared, so a live
+                                                  -- cascade always has at least Level 1
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_activity_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    cleared_at        TIMESTAMPTZ,                -- depth reached 0
-    trashed_at        TIMESTAMPTZ,                -- set on clearing or by the user
+    completed_at      TIMESTAMPTZ,                -- last time the Source quiz was finished at or
+                                                  -- above the threshold with no misses
+    trashed_at        TIMESTAMPTZ,                -- set by the user only
     updated_seq       BIGINT NOT NULL,
 
     -- The leave value set must belong to the cascade's lexicon.
     FOREIGN KEY (leave_set_id, lexicon_id) REFERENCES leave_sets (id, lexicon_id),
 
     CHECK ((quiz_type = 'leave_value') = (leave_set_id IS NOT NULL)),
-    CHECK ((cleared_at IS NOT NULL) = (depth = 0)),
-    CHECK (cleared_at IS NULL OR trashed_at IS NOT NULL)
+    CHECK (completed_at IS NULL OR depth = 1)
 );
 CREATE INDEX cascades_user_activity ON cascades (user_id, last_activity_at DESC);
 CREATE INDEX cascades_user_seq ON cascades (user_id, updated_seq);
@@ -2027,14 +2190,14 @@ Notes on the schema:
 - **No JSONB.** Filter parameters are typed columns, and a per-type `CHECK`
   guarantees each stored condition has exactly the parameters its type uses.
   The Rust `ConditionKind` enum is loaded from these rows and written back to
-  them. A round-trip test (see [Testing](#testing)) covers all 21 types. Sync
+  them. A round-trip test (see [Testing](#testing)) covers all 23 types. Sync
   operation payloads are not stored at all; only each operation's id, type and
   result are kept.
 - **The cascade stack is enforced by the database where it can be.** At most one
   active quiz per level, exactly one Source quiz, at most one quiz per
   (parent quiz, attempt, run boundary), a segment quiz always on Drill
-  progression, `depth = 0` exactly when the cascade is cleared, and a cleared
-  cascade is always in the Trash.
+  progression, `depth >= 1` always, and a completed cascade is at `depth = 1`
+  with its Source quiz active.
 - **Quiz options are copied, never referenced.** `cascades` holds what new
   quizzes start with and `quizzes` holds what each quiz actually uses, so
   changing a cascade's options can never rewrite the rules a quiz in progress is
@@ -2047,21 +2210,23 @@ Notes on the schema:
     counts, written in canonical order
   - a distribution's positions run 0..n−1 with no gaps, and no `letter` is
     longer than MAGPIE's `MAX_LETTER_BYTE_LENGTH`
-- **Catalog deletion is refused while in use.** References to
+- **Catalog deletion is refused while actively in use.** References to
   `letter_distributions`, `lexicons` and `leave_sets` from other catalog rows,
   cascades and search conditions have no `ON DELETE` action, so deleting a
-  referenced item fails. Deleting an unreferenced lexicon or leave value set
-  cascades to its words or values. The admin API checks references first so it
-  can explain the refusal.
+  referenced item fails. The admin API therefore counts references first,
+  separating active cascades from trashed ones: an active reference is refused
+  with an explanation, and trashed cascades and their cleared quizzes are purged
+  in the delete transaction before the catalog row is removed. Deleting an
+  unreferenced lexicon or leave value set cascades to its words or values.
 - **Deleting an account** is a single `DELETE FROM users`. Everything the user
-  owns cascades from `users`. References between user-owned rows
-  (`saved_searches.spec_id`, `cascades.spec_id`) use the default `NO ACTION`,
-  which Postgres checks at the end of the statement. Cascaded deletes of both
-  sides therefore succeed, while deleting a spec that is still in use fails.
+  owns cascades from `users`. The reference between user-owned rows
+  (`cascades.spec_id`) uses the default `NO ACTION`, which Postgres checks at the
+  end of the statement. Cascaded deletes of both sides therefore succeed, while
+  deleting a spec that is still in use fails.
   Catalog items the user uploaded stay, with `uploaded_by` set to `NULL`.
 - **Purging a cascade** deletes its question index, quizzes, questions and
   attempts by cascade. In the same transaction, the application deletes the
-  cascade's spec if no saved search uses it, writes tombstones for the cascade
+  cascade's spec, writes tombstones for the cascade
   and each quiz, and bumps the user's sync sequence.
 - **The 300,000 ceiling** lives in `cascades.question_count`,
   `quizzes.question_count`, `cascade_questions.idx` and `quiz_questions.position`,
@@ -2078,7 +2243,7 @@ Notes on the schema:
   - `question_key` exists in the cascade's lexicon or leave value set
   - `word_count` and `leave_count` match their rows
   - a user has at most `MAX_CASCADES_PER_USER` cascades, counting the Trash
-  - every input action has at least one binding
+  - every input action has at least one binding in each set
   - a segment quiz's `origin_segment_end` is a multiple of its parent's segment
     size, is less than the parent's `question_count`, and its questions are
     exactly the questions its parent has graded missed in positions below that
@@ -2184,9 +2349,6 @@ Preferences are read and written through sync, not a separate endpoint.
 | `GET` | `/api/lexicons` | `[{ name, letter_distribution, word_count, leave_count }]`, where `leave_count` is `null` for a lexicon without leave values. Only items indexed by this instance are listed. |
 | `GET` | `/api/letter-distributions/:name` | `{ name, tiles: [{ letter, blank_letter, count, value, is_vowel }] }` in tile order (blank first), for parsing, display and the tile palette |
 | `POST` | `/api/search/preview` | Body `{ lexicon, quiz_type, conditions[] }` → `{ count, sample[], over_cap }`, or `400` with `{ errors: [{ row, field, message }] }` |
-| `GET` | `/api/searches` | The user's saved searches |
-| `POST` | `/api/searches` | Save `{ name, conditions[] }`; the same name overwrites after the UI confirms |
-| `DELETE` | `/api/searches/:id` | Delete a saved search |
 
 A condition on the wire:
 
@@ -2257,11 +2419,11 @@ is a `400`.
 |---|---|---|
 | `GET` | `/api/admin/catalog` | Every distribution, lexicon and leave value set, with sizes, uploader, upload time, reference counts and per-instance load status |
 | `POST` | `/api/admin/letter-distributions` | Multipart `name`, `file`. `201` with the distribution, or `400` with `{ errors: [{ line, message }], total_errors }`. |
-| `DELETE` | `/api/admin/letter-distributions/:id` | `409` with what still uses it |
+| `DELETE` | `/api/admin/letter-distributions/:id` | `409` with what still actively uses it. `?purge_trashed=true` confirms purging the trashed cascades that reference it |
 | `POST` | `/api/admin/lexicons` | Multipart `name`, `letter_distribution`, `file` |
-| `DELETE` | `/api/admin/lexicons/:id` | `409` with what still uses it |
+| `DELETE` | `/api/admin/lexicons/:id` | `409` with what still actively uses it. `?purge_trashed=true` confirms purging the trashed cascades that reference it |
 | `POST` | `/api/admin/leave-sets` | Multipart `lexicon`, `file` |
-| `DELETE` | `/api/admin/leave-sets/:id` | `409` with what still uses it |
+| `DELETE` | `/api/admin/leave-sets/:id` | `409` with what still actively uses it. `?purge_trashed=true` confirms purging the trashed cascades that reference it |
 
 `GET /health` checks the database connection and that every catalog item present
 at startup is indexed.
@@ -2277,7 +2439,7 @@ SvelteKit static SPA. The routes:
 | `/` | Landing page (logged out) or redirect to `/cascades` |
 | `/register`, `/register/check-email`, `/confirm-email`, `/login`, `/reset-password`, `/reset-password/confirm` | Auth |
 | `/cascades` | Cascades page |
-| `/cascades/new` | Cascade builder (type, lexicon, filter rows, load/save search, threshold, preview) |
+| `/cascades/new` | Cascade builder (type, lexicon, filter rows, threshold, preview) |
 | `/cascades/:id` | Player for the cascade's deepest level, with the ladder panel |
 | `/trash` | Cleared quizzes and trashed cascades |
 | `/account` | Preferences, controls, sync status, offline storage use, password, sign out everywhere, delete account |
@@ -2304,8 +2466,12 @@ Components:
 
 - **`FilterRow`**: one component per condition. It is driven by a single
   frontend table (`lib/filters.ts`) giving each type's label, parameter inputs,
-  defaults, bounds, whether Not is allowed, and which quiz types it applies to.
-  The Leave Value filter uses decimal inputs that may be left blank. The backend
+  defaults, bounds, whether Not is allowed, whether the row may be joined with
+  **or** (limit rows may not), and which quiz types it applies to. The row also
+  renders the and/or join dropdown for every row but the first, and the groups
+  it forms are shown by an indent rule down the left of the list. The Leave
+  Value filter uses decimal inputs that may be left blank, and the two inner
+  hook filters take no parameters at all. The backend
   has its own validation; this table only drives the UI, and a contract test
   keeps the two in step (see [Testing](#testing)).
 - **`TilePalette`**: clickable tiles for the current distribution, shown under
@@ -2338,10 +2504,12 @@ Components:
   `previous`.
 - **`Flashcard`**: question, answer and grade display. The font scales for long
   alphagrams and long definitions.
-- **`ControlsEditor`**: the binding list per action, the capture box, conflict
-  and reserved-stroke notices, and Reset to defaults. It saves through a
-  `set_bindings` operation.
-- **`TypedAnagramCard`**: answer input, found counter, found and wrong lists,
+- **`ControlsEditor`**: the two shortcut-set switches, the binding list per
+  action within each set, the capture box, conflict and reserved-stroke notices,
+  and Reset to defaults. It saves the switches through `set_preferences` and the
+  bindings through a `set_bindings` operation.
+- **`TypedAnagramCard`**: answer input, the found counter when **Show answers
+  found** is on, found and wrong lists,
   give-up and override controls. It checks entries against the card's answer
   list locally, and, when the quiz requires alphabetical order, against the
   furthest answer entered so far, marking an out-of-order answer and showing the
@@ -2494,6 +2662,17 @@ the site data in the browser, because local cursors no longer match.
     `Consists of AEIOU 70–100`, and the lax tie cases.
   - Leave Value: inclusive bounds, open bounds, negative values, and a value
     exactly equal to a bound.
+  - Inner hooks: a word whose first tile can be dropped, one whose last tile
+    can, one where both can, a one-tile word (never a match), and both negated.
+    A Catalan fixture checks that a multi-character first tile is dropped as one
+    tile.
+  - `.` and `?`: every pattern example rerun with `.` substituted gives
+    identical results, and a pattern normalizes to `?` on the way into storage.
+  - AND / OR: a two-group spec returns the union of the two groups' results;
+    `A and B or C` groups as `(A and B) or C`, not `A and (B or C)`; a duplicate
+    matched by both groups appears once; a limit row applies to the union; and a
+    single-group spec matches the old AND-only behaviour on every fixture
+    search.
   - Tile handling:
     - `A[NY]S` and typed `ANYS` both parse to three tiles.
     - Palette-inserted `N` + `Y` stay two tiles.
@@ -2502,13 +2681,15 @@ the site data in the browser, because local cursors no longer match.
     - Sort order follows the distribution file, with the blank first.
     - Vowel and point counts use the distribution.
 - **Property tests** (`proptest`):
-  - The shortcut candidate paths return the same results as a full scan.
+  - The shortcut candidate paths return the same results as a full scan,
+    including when only some groups carry a Length or exact Anagram Match row.
   - Anagram Match without wildcards returns exactly the alphagram map entry.
   - Negating a predicate partitions the candidates.
   - Limit ranges are subsets of the unlimited results.
   - Over random sequences of grades, finishes and restores, the cascade stack
-    stays valid: the active levels are exactly `1..depth`, only the deepest level
-    is played, and every level's questions come from the Source quiz.
+    stays valid: the active levels are exactly `1..depth`, `depth >= 1`, the
+    Source quiz is always active at Level 1, only the deepest level is played,
+    and every level's questions come from the Source quiz.
 - **Probability tests** check `combinations` against brute-force enumeration of
   a small bag for 0, 1 and 2 blanks (and for a bag with no blanks), and check
   that ranks, minimum ranks and maximum ranks are consistent on ties.
@@ -2536,13 +2717,14 @@ the site data in the browser, because local cursors no longer match.
     touching existing quizzes, and a segment quiz being Drill in a Ladder cascade
 - **Export tests**: the formatter fixtures in `contract-fixtures/export/` cover
   all three quiz types, the four selections, both formats, both orderings,
-  multi-character tiles in MAGPIE notation, CSV quoting of definitions with
+  multi-character tiles written plainly with no brackets, CSV quoting of
+  definitions with
   commas and quotes, and the cascade-wide definition of correct and missed across
   several active quizzes. A Rust test and a Vitest test run the same fixtures, and
   an integration test checks that `GET /api/cascades/:id/export` returns the same
   bytes for the same request.
 - **Zyzzyva parity** (local only, needs licensed data): a script runs a
-  checked-in list of saved searches against a real CSW24 upload and compares
+  checked-in list of searches against a real CSW24 upload and compares
   the word lists with exports from Zyzzyva for the same searches. Differences
   are either fixed or recorded here as intended deviations.
 - **Upload validation tests**: one failing file per rule under
@@ -2551,14 +2733,14 @@ the site data in the browser, because local cursors no longer match.
   and the total. Every letter distribution file in MAGPIE-DATA, fetched at a
   pinned commit, uploads unchanged and produces the expected tiles.
 - **Schema tests**:
-  - Every one of the 21 condition types round-trips through
+  - Every one of the 23 condition types round-trips through
     `search_conditions` and back into an equal `ConditionKind`.
   - For each type, inserting a row with a missing or extra parameter, or with
     Not where it isn't allowed, is rejected by the `CHECK`.
   - A Leave Value cascade whose leave value set belongs to another lexicon is
     rejected by the composite foreign key.
-  - A second active quiz at the same level, a second Source quiz, and a cleared
-    cascade that isn't in the Trash are each rejected.
+  - A second active quiz at the same level, a second Source quiz, a `depth` of 0
+    and a cleared Source quiz are each rejected.
 - **Sync integration tests** (`cargo test`, `TEST_DATABASE_URL`):
   - A repeated operation is applied once and gets the same result.
   - Operations are applied in `device_seq` order, and one rejection doesn't stop
@@ -2583,7 +2765,9 @@ the site data in the browser, because local cursors no longer match.
     revoking `is_admin` takes effect on the next request
   - uploads followed by catalog reload across two in-process app instances
     sharing one database (`NOTIFY`), and the reconcile fallback
-  - deletion refused for each kind of reference, and allowed once unreferenced
+  - deletion refused for each kind of active reference, allowed once
+    unreferenced, and allowed with `purge_trashed` when only trashed cascades
+    and cleared quizzes are left, which are purged with tombstones
   - cascade creation for all three types, Start over, and card pages
   - the cascade limit, including trashed cascades counting toward it and two
     simultaneous creations competing for the last slot
@@ -2611,14 +2795,20 @@ the site data in the browser, because local cursors no longer match.
     - Finish Level 1 below the threshold and go down to Level 2.
     - Clear Level 2 with misses and get a replacement at Level 2.
     - Clear it with no misses and climb back to Level 1's reshuffled quiz.
-    - Clear Level 1 and see the completion screen.
-  - **The plane:**
+    - Finish Level 1 at or above the threshold with misses and see the Source
+      quiz reset, not trashed, with a new Level 2 of its misses.
+    - Finish Level 1 with no misses and see the completion screen, the cascade
+      still present with its Source quiz reset and playable, and nothing about
+      the Source quiz in the Trash.
+  - **Offline study:**
     1. Create a cascade and wait for Available offline.
     2. Go offline (`context.setOffline(true)`) and reload the page.
-    3. Study through several finishes, including a descent and a clear.
+    3. Study through several finishes, including a descent, a clear that climbs
+       back up, and a Source quiz reset.
     4. Restore a quiz from the Trash.
-    5. Go back online and see Synced.
-    6. In a fresh browser context, log in and see identical cascade state, grades
+    5. Confirm Create Cascade is disabled and says why.
+    6. Go back online and see Synced.
+    7. In a fresh browser context, log in and see identical cascade state, grades
        and question order.
   - **Two devices:** finish the same level offline in two browser contexts,
     reconnect both, and see the second device's notice and matching final state.
@@ -2640,13 +2830,22 @@ the site data in the browser, because local cursors no longer match.
     cascade as a CSV, offline, and check the contents; then ask for definitions
     that were never downloaded, while offline, and see the fallback notice.
   - Turn on hooks and definitions, and see them in anagram answers.
+  - Turn on **Show answers found** and see `0 of 9 found` above the typed input;
+    with it off (the default), neither the count nor the total appears.
+  - Build a cascade with two filter groups joined by **or** and see the preview
+    count match the union, and a `.` in a pattern behave exactly like `?`.
   - **Desktop controls:**
-    - Left click shows and advances, right click toggles, and middle click goes
-      back, with no context menu appearing.
+    - Mouse 1 shows and advances, Mouse 2 toggles, and Mouse 3 goes back, with no
+      context menu appearing.
+    - `,` shows and advances, `M` toggles, and `J` goes back.
     - Clicks on the side rails do nothing to the quiz.
+    - Turn **mouse shortcuts** off: clicks in the quiz area do nothing, the keys
+      still work, and turning the setting back on restores the same bindings.
+    - Turn **keyboard shortcuts** off: `,`, `M` and `J` do nothing and the mouse
+      still works.
     - Rebind Toggle grade to the wheel and to `Shift+T`, and see both work and
       the change sync to a second browser context.
-    - A binding can't be removed from an action that has only one.
+    - A binding can't be removed from an action that has only one in its set.
     - In typed mode, bound letter keys type into the input instead of acting.
   - **Touch zones** (mobile viewport emulation, portrait and landscape): each
     zone fires its action, a drag in the Show / Next zone scrolls a long answer
@@ -2654,7 +2853,9 @@ the site data in the browser, because local cursors no longer match.
   - Set leave decimals to 3 and see a leave answer rendered to three places.
   - As an admin, upload a distribution, lexicon and leave value set, see a
     deliberately broken file rejected with line numbers, build a Leave Value
-    cascade from the new set, and see deletion refused while the cascade exists.
+    cascade from the new set, see deletion refused while the cascade is active,
+    then trash the cascade and see deletion go through after confirming the
+    purge.
 
 ---
 
@@ -2672,10 +2873,10 @@ the site data in the browser, because local cursors no longer match.
    - probability and playability ordering
    - `LISTEN/NOTIFY` reload
    - the `/admin` pages
-4. **Search engine**: all 21 filters, including both limits, validation errors,
+4. **Search engine**: all 23 filters, including both limits, validation errors,
    unit, property and parity tests, `/api/search/preview`.
 5. **Cascade builder**: filter rows, applicability rules, tile palette, word list
-   editor, live preview, saved searches, clear threshold, quiz options,
+   editor, live preview, clear threshold, quiz options,
    `POST /api/cascades`, card pages.
 6. **Cascade rules**:
    - the Rust and TypeScript rule modules, including progression and segments,
