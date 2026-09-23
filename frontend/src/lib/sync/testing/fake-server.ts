@@ -466,6 +466,27 @@ export class FakeServer {
 		};
 	}
 
+	/** GET …/cards?keys=1: the question keys, synthetic here. */
+	keys(cascadeId: string, from: number, limit: number): { from: number; keys: string[] } | null {
+		const e = this.cascades.get(cascadeId);
+		if (!e) return null;
+		const count = [...e.sim.quizzes.values()].find((q) => q.state.origin === 'source')!.state.question_count;
+		const keys: string[] = [];
+		for (let i = from; i < Math.min(count, from + limit); i++) keys.push(`KEY${i}`);
+		return { from, keys };
+	}
+
+	/** GET …/cards: full cards; definitions only when asked for. */
+	cards(cascadeId: string, from: number, limit: number, hooks: boolean, definitions: boolean) {
+		const k = this.keys(cascadeId, from, limit);
+		if (!k) return null;
+		return k.keys.map((key, i) => ({
+			idx: from + i,
+			key,
+			answer: [{ word: `WORD${from + i}`, ...(hooks ? { front_hooks: 'S' } : {}), ...(definitions ? { definition: 'a word' } : {}) }]
+		}));
+	}
+
 	/** Prunes every tombstone, raising the floor to the highest removed. */
 	pruneTombstones() {
 		for (const t of this.tombstones) this.floor = Math.max(this.floor, t.seqn);

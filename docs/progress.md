@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7c — Local-first player: download manager (next to start)
-- **Last green checkpoint:** Phase 7b — sync engine
+- **Phase:** 7d — Local-first player: service worker (in progress)
+- **Last green checkpoint:** Phase 7c — download manager
 
 ## Environment notes (this machine)
 
@@ -286,10 +286,28 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   asserts the new cascade's 18 rows are in IndexedDB and the cursor advanced
   against the real server.
 
+### Phase 7c — Download manager ✅
+- `lib/sync/downloads.ts`: after every pull (and on first open / Keep
+  offline / restore via `ensureCascade`): drop pass (window, then
+  ROW_STORAGE_BUDGET in two tiers with the budget-dropped mark; skips pending
+  ops, open players via Web Locks `wordfall-player-<id>` or this tab's own
+  open cascade), distributions into the `distributions` store, index lists
+  deepest level first, pending quizzes' grades (sync first; attempt/seed
+  mismatch → discard and sync again; completeness vs counters; positions;
+  hash), keys (`keys=1`) for every wanted cascade before any answers, cards
+  with the extras the preferences ask for (refetch when lacking), eviction
+  oldest-open first sparing user-kept and pending cascades, quota path (drop
+  pass, eviction, one retry, then `noRoom`), 429 → wait and refetch the same
+  page, player priority (`forPlayer`), totals to the accounts row. Sizes of
+  keys/answers measured as written (`meta.sizes`), rows at ROW_BYTES each.
+- `lib/sync/keep.ts` (Keep offline on = open + fetch now; off = opt-out).
+- Runtime runs the manager after each pull without blocking the cycle.
+- Tests: `lib/sync/downloads.test.ts` (16).
+
 ## Next
 
 Phase 7 — Local-first player, split into sub-milestones, each committed at
-green: (done: 7a, 7b) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
+green: (done: 7a, 7b, 7c) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
 temporary `lib/local/device.ts`), base/overlay/staging/outbox and
 `applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
 paged pull, rebase, notices, resync); **7c** download manager (window,

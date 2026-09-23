@@ -17,6 +17,8 @@ export interface MetaValues {
 	keep_offline: string[];
 	auto_keep_optout: string[];
 	budget_dropped: string[];
+	/** Bytes of each cascade's question keys and answers, measured as they were written. */
+	sizes: Record<string, { key_bytes: number; answer_bytes: number }>;
 }
 export type MetaKey = keyof MetaValues;
 
@@ -28,7 +30,8 @@ export const META_DEFAULTS: { [K in MetaKey]: () => MetaValues[K] } = {
 	opens: () => ({}),
 	keep_offline: () => [],
 	auto_keep_optout: () => [],
-	budget_dropped: () => []
+	budget_dropped: () => [],
+	sizes: () => ({})
 };
 
 type Tx = IDBPTransaction<UserSchema, StoreName[], 'readwrite' | 'readonly'>;

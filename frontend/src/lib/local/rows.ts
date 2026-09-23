@@ -144,7 +144,7 @@ export interface PreferencesRow {
 
 export interface DistributionRow {
 	name: string;
-	tiles: { letter: string; blank_letter: string; value: number; is_vowel: boolean }[];
+	tiles: { letter: string; blank_letter: string; count: number; value: number; is_vowel: boolean }[];
 }
 
 /** An outbox entry: the operation as sent, and what the device needs to find it. */

@@ -60,6 +60,11 @@ export async function deleteCascadeHere(tx: RwTx, cascadeId: string) {
 		delete opens[cascadeId];
 		await writeMeta(tx, 'opens', opens);
 	}
+	const sizes = await readMeta(tx, 'sizes');
+	if (cascadeId in sizes) {
+		delete sizes[cascadeId];
+		await writeMeta(tx, 'sizes', sizes);
+	}
 	for (const key of ['keep_offline', 'auto_keep_optout', 'budget_dropped'] as const) {
 		const ids = await readMeta(tx, key);
 		if (ids.includes(cascadeId)) {
@@ -91,7 +96,7 @@ async function clearOverlay(tx: RwTx, cascadeId: string, keep?: (store: string, 
 // ---------------------------------------------------------------------------
 
 /** Positions for every row from the seed; grades untouched (a materialisation). */
-function withPositions(rows: QuestionRow[], seed: string): QuestionRow[] {
+export function withPositions(rows: QuestionRow[], seed: string): QuestionRow[] {
 	const idx = rows.map((r) => r.question_idx).sort((a, b) => a - b);
 	const pos = new Map<number, number>();
 	shuffle(idx, BigInt(seed)).forEach((i, p) => pos.set(i, p));
