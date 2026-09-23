@@ -11,7 +11,17 @@
 	import { describe } from '$lib/auth/errors';
 	import { forgetSession, logout, session } from '$lib/auth/session.svelte';
 	import { removeAccountData } from '$lib/local/accounts';
-	import { closeUserDb } from '$lib/local/open';
+	import { closeUserDb, userDb } from '$lib/local/open';
+	import { onMount } from 'svelte';
+	import SyncStatus from '$lib/components/SyncStatus.svelte';
+	import PreferencesCard from '$lib/components/account/PreferencesCard.svelte';
+	import ControlsEditor from '$lib/components/account/ControlsEditor.svelte';
+	import StorageCard from '$lib/components/account/StorageCard.svelte';
+	import type { UserDb } from '$lib/local/db';
+	import { getMeta } from '$lib/local/meta';
+	import { preferencesView } from '$lib/local/preferences';
+	import type { PreferencesRow } from '$lib/local/rows';
+	import { syncState } from '$lib/sync/runtime.svelte';
 
 	let current = $state('');
 	let next = $state('');
@@ -28,6 +38,29 @@
 	let deleteError = $state<string | null>(null);
 
 	let removeData = $state(false);
+
+	let db = $state<UserDb | null>(null);
+	let prefs = $state<PreferencesRow | null>(null);
+	let maxQuiz = $state(300_000);
+
+	async function refreshPrefs() {
+		if (db) prefs = await preferencesView(db);
+	}
+
+	onMount(() => {
+		void (async () => {
+			if (!session.userId) return;
+			db = await userDb(session.userId, session.username);
+			maxQuiz = (await getMeta(db, 'server')).max_quiz_questions;
+			await refreshPrefs();
+		})();
+	});
+
+	// A pull may change the preferences row.
+	$effect(() => {
+		void syncState.changed.tick;
+		void refreshPrefs();
+	});
 
 	function fieldErrorsOr(e: unknown, set: (f: FieldError[]) => void): string | null {
 		if (e instanceof ApiError && e.fieldErrors.length) {
@@ -107,8 +140,15 @@
 				<Label for="remove-data">Remove this account's data from this device</Label>
 			</div>
 			<Button variant="outline" onclick={doLogout}>Log out</Button>
+			<SyncStatus />
 		</Card.Content>
 	</Card.Root>
+
+	{#if db && prefs}
+		<PreferencesCard {db} {prefs} {maxQuiz} onchange={refreshPrefs} />
+		<ControlsEditor {db} bindings={prefs.bindings} onchange={refreshPrefs} />
+		<StorageCard {db} />
+	{/if}
 
 	<Card.Root>
 		<Card.Header><Card.Title>Change password</Card.Title></Card.Header>

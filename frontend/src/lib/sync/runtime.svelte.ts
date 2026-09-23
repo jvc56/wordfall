@@ -19,6 +19,8 @@ class SyncState {
 	/** The cascade this tab's player has open (the drop pass skips it). */
 	openCascade = $state<string | null>(null);
 	overBudgetByUserKept = $state(false);
+	/** Operations waiting in the outbox. */
+	pending = $state(0);
 	/** Cascades a rebase changed: a player showing one refreshes (step 5). */
 	changed = $state<{ ids: string[]; tick: number }>({ ids: [], tick: 0 });
 }
@@ -67,6 +69,8 @@ function post(m: Message) {
 /** Starts syncing for this account; returns the function that stops it. */
 export function startSync(userId: string): () => void {
 	stopSync();
+	currentUser = userId;
+	void refreshPending();
 	if (typeof BroadcastChannel !== 'undefined') {
 		channel = new BroadcastChannel(`wordfall-sync-${userId}`);
 		channel.onmessage = (ev) => {
@@ -100,6 +104,7 @@ export function startSync(userId: string): () => void {
 				},
 				onStatus: (s) => {
 					syncState.status = s;
+					void refreshPending();
 					post({ kind: 'status', status: s });
 					if (s === 'needs_login') session.needsLogin = true;
 				},
@@ -146,6 +151,16 @@ export function stopSync() {
 export function afterLocalWrite() {
 	if (engine) engine.schedule();
 	else post({ kind: 'kick' });
+	void refreshPending();
+}
+
+let currentUser: string | null = null;
+
+/** Operations waiting in the outbox, for "3 changes waiting to sync". */
+export async function refreshPending() {
+	if (!currentUser) return;
+	const db = await userDb(currentUser);
+	syncState.pending = await db.count('outbox');
 }
 
 export function dismissNotice(n: Notice) {

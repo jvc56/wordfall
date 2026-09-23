@@ -195,3 +195,16 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
 - **Provisional choice:** "1 answer from this device wasn't kept." for one,
   the literal sentence otherwise (`frontend/src/lib/sync/notices.ts`,
   `keptSentence`).
+
+## PQ-015 — Where the device learns the cascade limit (open)
+
+- **Plan:** Cascade limit (405–427): "The Cascades page shows `87 of 100
+  cascades`, and the cascade builder shows a warning from 90";
+  API (4094): `/api/auth/me` returns `{ user_id, username, is_admin,
+  trash_retention_days, max_quiz_questions }` — no limit.
+- **Issue:** `MAX_CASCADES_PER_USER` is configurable on the server, but no
+  endpoint reports it before a `409 { error: "cascade_limit", limit }`.
+- **Provisional choice:** the device uses the documented default, 100, as a
+  client constant (`frontend/src/lib/cascades/summary.ts`, `CASCADE_LIMIT`),
+  with the warning from 90, as PQ-010 does for the search rate. The server's
+  `409` still refuses creation at its own configured limit.

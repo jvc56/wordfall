@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7f — Cascades, Trash and Account pages (next to start)
-- **Last green checkpoint:** Phase 7e — the player
+- **Phase:** 7g — Export (next to start)
+- **Last green checkpoint:** Phase 7f — Cascades, Trash and Account pages
 
 ## Environment notes (this machine)
 
@@ -337,6 +337,21 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 - Tests: `lib/player/player.test.ts` (14), `CascadeLadder.test.ts` (2);
   e2e `player.spec.ts` (study with keys, offline, reload offline, drain).
 
+### Phase 7f — Cascades, Trash and Account pages ✅
+- `lib/cascades/summary.ts` (options summary, ladder text, offline badge
+  states, Trash groups with provisional purge dates, CASCADE_LIMIT 100 /
+  warning 90 — PQ-015). `/cascades` (limit, sync status, compact ladder,
+  badges, Quiz options dialog, Export…, Start over, Keep offline with the
+  automatic-keep hint, Move to Trash), `/trash` (groups collapsed, pages of
+  100 behind Show more, single-entry groups open, Restore / Export… /
+  Delete forever, "downloads when online"), `/account` (+ SyncStatus,
+  `PreferencesCard`, `ControlsEditor` with capture box, `StorageCard` with
+  budget line, kept cascades, accounts and removal). SyncStatus shows "N
+  changes waiting to sync". Builder: defaults from the preferences view
+  (clamped to the cap), cascade-count warning and limit.
+- Tests: `lib/cascades/summary.test.ts` (4); e2e `pages.spec.ts`.
+- Export… buttons link to `/cascades/:id/export` (7g).
+
 ## Next
 
 Phase 7 — Local-first player, split into sub-milestones, each committed at
@@ -368,6 +383,7 @@ frontend unit tests (5000–5298).
 - PQ-012 (sequence wire forms: sync_seq text, cursor number or text) — provisional.
 - PQ-013 (finish/finish_segment check order) — provisional.
 - PQ-014 (singular "1 answer … wasn't kept") — provisional.
+- PQ-015 (cascade limit as a client constant) — provisional.
 
 ## Known failing tests
 

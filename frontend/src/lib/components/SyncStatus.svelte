@@ -15,10 +15,11 @@
 			case 'no_room':
 				return 'Not enough room on this device';
 			case 'offline':
-				return 'Offline — changes will sync';
-			case 'syncing':
-				return 'Syncing…';
+				return 'Offline';
 			default:
+				if (syncState.pending > 0) {
+					return syncState.pending === 1 ? '1 change waiting to sync' : `${syncState.pending} changes waiting to sync`;
+				}
 				return 'Synced';
 		}
 	});

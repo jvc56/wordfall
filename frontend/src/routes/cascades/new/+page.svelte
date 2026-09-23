@@ -38,6 +38,8 @@
 	} from '$lib/filters';
 	import { storeCreated, type Created } from '$lib/local/created';
 	import { getMeta } from '$lib/local/meta';
+	import { preferencesView } from '$lib/local/preferences';
+	import { allCascades, CASCADE_LIMIT, CASCADE_WARNING } from '$lib/cascades/summary';
 	import { userDb } from '$lib/local/open';
 	import { DEFAULT_OPTIONS, clampPrefill, type QuizOptions } from '$lib/options';
 	import { PREVIEW_MANUAL_ENTRIES } from '$lib/sync/config';
@@ -51,6 +53,7 @@
 	let dist = $state<Distribution | null>(null);
 	let root = $state<GroupState>(newGroup('and', [newRow('length', 'anagram', null)]));
 	let threshold = $state(80);
+	let cascadeCount = $state(0);
 	let options = $state<QuizOptions>({ ...DEFAULT_OPTIONS });
 	let name = $state('');
 	let nameEdited = $state(false);
@@ -84,6 +87,20 @@
 	onDestroy(() => scheduler.dispose());
 
 	onMount(async () => {
+		if (session.userId) {
+			// The threshold and options are prefilled from the preferences view, the
+			// segment size clamped to the cap in `meta` (§ Creating a cascade, § Quiz options).
+			const db = await userDb(session.userId, session.username);
+			const p = await preferencesView(db);
+			const metaCap = (await getMeta(db, 'server')).max_quiz_questions;
+			threshold = p.default_clear_threshold;
+			options = {
+				segment_size: clampPrefill(p.default_segment_size, metaCap),
+				progression: p.default_progression,
+				require_alphabetical: p.default_require_alphabetical
+			};
+			cascadeCount = (await allCascades(db)).length;
+		}
 		options.segment_size = clampPrefill(options.segment_size, cap);
 		try {
 			lexicons = await loadLexicons();
@@ -341,11 +358,16 @@
 				<Input id="name" bind:value={name} maxlength={200} oninput={() => (nameEdited = true)} />
 			</div>
 			{#if createError}<p class="text-sm text-destructive">{createError}</p>{/if}
+			{#if cascadeCount >= CASCADE_LIMIT}
+				<p class="text-sm">You have {cascadeCount} of {CASCADE_LIMIT} cascades. <a class="underline" href="/trash">Empty the Trash</a> to make room.</p>
+			{:else if cascadeCount >= CASCADE_WARNING}
+				<p class="text-sm text-muted-foreground">{cascadeCount} of {CASCADE_LIMIT} cascades used.</p>
+			{/if}
 			<div>
 				<Button
 					type="button"
 					onclick={create}
-					disabled={creating || !lexicon || !dist || wire.errors.size > 0 || !name.trim() || threshold < 1 || threshold > 100}
+					disabled={creating || cascadeCount >= CASCADE_LIMIT || !lexicon || !dist || wire.errors.size > 0 || !name.trim() || threshold < 1 || threshold > 100}
 				>
 					{busy ? 'the server is busy' : creating ? 'Creating…' : 'Create Cascade'}
 				</Button>
