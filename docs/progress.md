@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7b — Local-first player: sync engine (next to start)
-- **Last green checkpoint:** Phase 7a — IndexedDB per-user stores
+- **Phase:** 7c — Local-first player: download manager (next to start)
+- **Last green checkpoint:** Phase 7b — sync engine
 
 ## Environment notes (this machine)
 
@@ -264,10 +264,32 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   tab's write during a rebase, fixture DB per earlier version, versionchange,
   device id, preferences view).
 
+### Phase 7b — Sync engine ✅
+- `lib/sync/protocol.ts` (wire types, BATCH_OPS 500), `pull.ts` (pages:
+  question rows straight to the base for a new quiz or an unchanged attempt,
+  nowhere for a pending quiz, else staging; tombstones/preferences in memory;
+  per-cascade touched and foreign-sequence sets), `rebase.ts` (steps 1–4 per
+  cascade in one transaction with the outbox; promotion by attempt/seed and
+  hash; rebuild/materialisation/pending; fast path by row sequences; full
+  pull deletion by `seq ≤ S`, sparing cascades with pending ops or a later
+  creation; cursor advances only at the end), `notices.ts` (sentences by
+  reason, owners and dependents, PQ-014), `policy.ts` (question_rows_for:
+  window, keep offline, auto keep, rows held), `engine.ts` (batches,
+  back-to-back drain, 429/503 Retry-After, 401 needs_login, 426 reload flag
+  in meta, resync → full pull, Web Locks leader, triggers),
+  `runtime.svelte.ts` (leader tab runs it; BroadcastChannel status/kick),
+  `lib/local/created.ts` (a created cascade into the base at once).
+- `__APP_BUILD__`/`__APP_COMMIT__` via Vite define from WORDFALL_BUILD /
+  WORDFALL_COMMIT (Docker build args APP_BUILD/APP_COMMIT).
+- Tests: `lib/sync/engine.test.ts` (33) against `testing/fake-server.ts`
+  (rules via SimCascade, per-row sequences, paging); e2e builder journey now
+  asserts the new cascade's 18 rows are in IndexedDB and the cursor advanced
+  against the real server.
+
 ## Next
 
 Phase 7 — Local-first player, split into sub-milestones, each committed at
-green: (done: 7a) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
+green: (done: 7a, 7b) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
 temporary `lib/local/device.ts`), base/overlay/staging/outbox and
 `applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
 paged pull, rebase, notices, resync); **7c** download manager (window,
@@ -294,6 +316,7 @@ frontend unit tests (5000–5298).
 - PQ-011 (40 questions at S=5: 7 chains + 1 descent) — provisional.
 - PQ-012 (sequence wire forms: sync_seq text, cursor number or text) — provisional.
 - PQ-013 (finish/finish_segment check order) — provisional.
+- PQ-014 (singular "1 answer … wasn't kept") — provisional.
 
 ## Known failing tests
 

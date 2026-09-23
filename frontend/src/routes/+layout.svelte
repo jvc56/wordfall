@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { initSession, session } from '$lib/auth/session.svelte';
+	import { startSync } from '$lib/sync/runtime.svelte';
 
 	let { children } = $props();
 
@@ -21,6 +22,13 @@
 
 	onMount(() => {
 		initSession();
+	});
+
+	// Sync runs while an account is signed in and this tab still belongs to it.
+	$effect(() => {
+		const id = session.userId;
+		if (!id || session.signedOutInAnotherTab) return;
+		return startSync(id);
 	});
 
 	$effect(() => {

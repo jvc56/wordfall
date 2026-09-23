@@ -186,3 +186,12 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   vector ("the attempt and a duplicate run come before the depth") that pins
   it. The "Two different quizzes restored" row's `not_deepest` is unaffected,
   since that finish carries a current attempt.
+
+## PQ-014 — "K answers from this device weren't kept." when K is 1 (open)
+
+- **Plan:** Conflicts (after the table): 'The second sentence, "K answers
+  from this device weren't kept.", appears only when K is greater than 0.'
+- **Issue:** Read literally, K = 1 gives "1 answers … weren't kept."
+- **Provisional choice:** "1 answer from this device wasn't kept." for one,
+  the literal sentence otherwise (`frontend/src/lib/sync/notices.ts`,
+  `keptSentence`).

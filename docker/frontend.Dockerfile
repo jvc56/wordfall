@@ -6,8 +6,10 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY frontend/ ./
 COPY contract-fixtures/ /src/contract-fixtures/
+# The monotonic build number and git hash (PLAN.md § API → POST /api/sync).
 ARG APP_BUILD=0
-ENV PUBLIC_APP_BUILD=$APP_BUILD
+ARG APP_COMMIT=dev
+ENV WORDFALL_BUILD=$APP_BUILD WORDFALL_COMMIT=$APP_COMMIT
 RUN npm run build
 
 FROM nginx:1.27-alpine

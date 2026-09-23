@@ -9,7 +9,8 @@ export interface MetaValues {
 	identity: { user_id: string; username: string };
 	/** `device_id` is made once per device and user; `device_seq` counts from 1. */
 	device: { device_id: string; next_device_seq: number };
-	sync: { cursor: number | null; last_sync_at: string | null };
+	/** `upgrade_required`: a 426 was the last answer; cleared by a sync that succeeds. */
+	sync: { cursor: number | null; last_sync_at: string | null; upgrade_required?: boolean };
 	server: { trash_retention_days: number; max_quiz_questions: number };
 	/** When this device last opened each cascade (ISO time). */
 	opens: Record<string, string>;

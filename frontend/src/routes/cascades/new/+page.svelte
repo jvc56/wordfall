@@ -36,6 +36,7 @@
 		type LexiconInfo,
 		type QuizType
 	} from '$lib/filters';
+	import { storeCreated, type Created } from '$lib/local/created';
 	import { getMeta } from '$lib/local/meta';
 	import { userDb } from '$lib/local/open';
 	import { DEFAULT_OPTIONS, clampPrefill, type QuizOptions } from '$lib/options';
@@ -145,7 +146,9 @@
 			filters: wire.tree
 		};
 		try {
-			await sendWithRetry(() => api.post('/api/cascades', body), { onBusy: (b) => (busy = b) });
+			const created = await sendWithRetry(() => api.post<Created>('/api/cascades', body), { onBusy: (b) => (busy = b) });
+			// Into the base at once: a cascade starts downloading the moment it is created.
+			await storeCreated(await userDb(session.userId, session.username), created);
 			await goto(`/cascades/${body.id}`);
 		} catch (e) {
 			if (e instanceof ApiError && e.code === 'cascade_limit') {

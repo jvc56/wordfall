@@ -155,6 +155,13 @@ export interface OutboxEntry {
 	/** Set on a `move_cursor` only, so a newer one finds the pending one. */
 	cursor_quiz?: string;
 	op: WireOp;
+	/** What the device computed, for the notices (never sent). */
+	local?: {
+		level?: number;
+		outcome?: string;
+		new_quiz_question_count?: number;
+		new_quiz_questions_hash?: string;
+	};
 }
 
 /** An operation in its wire form (PLAN.md § API → POST /api/sync). */

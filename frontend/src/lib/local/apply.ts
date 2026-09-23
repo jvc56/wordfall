@@ -39,6 +39,8 @@ export const OPENING = new Set(['grade', 'move_cursor', 'finish', 'finish_segmen
 /** What an applied operation produced, as the server's result carries it. */
 export interface LocalResult {
 	cascade_id?: string;
+	/** The level of the quiz the operation named. */
+	level?: number;
 	outcome?: string;
 	new_quiz_question_count?: number;
 	new_quiz_questions_hash?: string;
@@ -290,7 +292,7 @@ export async function applyOp(tx: RwTx, op: WireOp, ctx: ApplyCtx): Promise<Loca
 				last_activity_at: later(q.last_activity_at, at)
 			});
 			await putCascade(tx, { ...c, last_activity_at: later(c.last_activity_at, at) });
-			return { cascade_id: c.id };
+			return { cascade_id: c.id, level: q.level };
 		}
 		case 'move_cursor': {
 			const { q, c } = await loadQuiz(tx, op.quiz_id as string);
@@ -299,7 +301,7 @@ export async function applyOp(tx: RwTx, op: WireOp, ctx: ApplyCtx): Promise<Loca
 			checkAttempt(s, op.attempt as number, BigInt(op.attempt_seed as string));
 			checkMoveCursor(s, op.position as number);
 			await putQuiz(tx, { ...q, cursor: op.position as number, cursor_moved_at: at, cursor_device_id: ctx.device_id });
-			return { cascade_id: c.id };
+			return { cascade_id: c.id, level: q.level };
 		}
 		case 'finish': {
 			const { q, c } = await loadQuiz(tx, op.quiz_id as string);
@@ -330,7 +332,7 @@ export async function applyOp(tx: RwTx, op: WireOp, ctx: ApplyCtx): Promise<Loca
 				seq: 0
 			};
 			await tx.objectStore('overlay_quiz_attempts').put(attempt);
-			const out: LocalResult = { cascade_id: c.id, outcome };
+			const out: LocalResult = { cascade_id: c.id, level: q.level, outcome };
 			let cascadeRow: CascadeRow = { ...c, last_activity_at: later(c.last_activity_at, at) };
 			let quizRow: QuizRow = { ...q, last_activity_at: later(q.last_activity_at, at) };
 			if (r.kind === 'finished') {
@@ -394,7 +396,7 @@ export async function applyOp(tx: RwTx, op: WireOp, ctx: ApplyCtx): Promise<Loca
 				.map((r) => r.question_idx)
 				.sort((a, b) => a - b);
 			const r = finishSegment(cs, qs, runMisses, end, BigInt(op.shuffle_seed as string));
-			const out: LocalResult = { cascade_id: c.id, outcome: r.kind };
+			const out: LocalResult = { cascade_id: c.id, level: q.level, outcome: r.kind };
 			if (r.kind === 'drilled') {
 				[out.new_quiz_question_count, out.new_quiz_questions_hash] = await insertQuiz(
 					tx,
@@ -446,6 +448,7 @@ export async function applyOp(tx: RwTx, op: WireOp, ctx: ApplyCtx): Promise<Loca
 			if (r.cascade_restored) await restartClocks(tx, c.id, ctx);
 			return {
 				cascade_id: c.id,
+				level: q.level,
 				new_quiz_question_count: q.question_count,
 				new_quiz_questions_hash: q.questions_hash
 			};
@@ -546,6 +549,8 @@ export async function applyLocally(db: UserDb, fields: NewOp, clock: () => Date 
 		const result = await applyOp(tx, op, { device_id: device.device_id, now, max_quiz_questions: server.max_quiz_questions });
 		const entry: OutboxEntry = { device_seq: op.device_seq, op };
 		if (result.cascade_id) entry.cascade_id = result.cascade_id;
+		const { level, outcome, new_quiz_question_count, new_quiz_questions_hash } = result;
+		if (level !== undefined) entry.local = { level, outcome, new_quiz_question_count, new_quiz_questions_hash };
 		const outbox = tx.objectStore('outbox');
 		if (op.type === 'move_cursor') {
 			// Only the latest pending cursor move per quiz: the old one goes and the

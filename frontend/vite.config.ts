@@ -28,6 +28,12 @@ export default defineConfig({
 			}
 		})
 	],
+	// PLAN.md § API → POST /api/sync: the build's monotonic integer build number,
+	// compared against MIN_APP_VERSION, and its git hash, logged but deciding nothing.
+	define: {
+		__APP_BUILD__: JSON.stringify(Number(process.env.WORDFALL_BUILD ?? 0)),
+		__APP_COMMIT__: JSON.stringify(process.env.WORDFALL_COMMIT ?? 'dev')
+	},
 	// default-src 'self' blocks data: URIs, so no asset is inlined as one.
 	build: { assetsInlineLimit: 0 },
 	server: {
