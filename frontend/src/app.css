@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* PLAN.md § Tech Stack: dark mode only, class-based, with `dark` always on the
+   root. PQ-001: Tailwind v4 has no `darkMode: 'class'` key; this variant is its
+   equivalent. */
+@custom-variant dark (&:where(.dark, .dark *));

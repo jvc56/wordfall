@@ -1,0 +1,14 @@
+/backend/target/
+/backend/.env
+node_modules/
+/frontend/build/
+/frontend/.svelte-kit/
+/e2e/test-results/
+/e2e/playwright-report/
+/.stack/
+/fixtures/licensed/
+*.pyc
+__pycache__/
+/infra/.terraform/
+/infra/*.tfstate*
+/infra/.terraform.lock.hcl.bak

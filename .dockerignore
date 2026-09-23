@@ -1,0 +1,9 @@
+backend/target
+backend/.env
+**/node_modules
+frontend/build
+frontend/.svelte-kit
+e2e
+.stack
+.git
+infra/.terraform

@@ -1,0 +1,63 @@
+# PLAN.md § Deployment and Operations: security headers and caching.
+# Rendered by the nginx image's envsubst step from BACKEND_UPSTREAM,
+# REAL_IP_FROM and HSTS.
+
+map $request_uri $wordfall_hsts { default "${HSTS}"; }
+
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    # The client address: the ALB's in production, the peer locally. The
+    # backend reads exactly one hop (TRUSTED_PROXY_HOPS=1).
+    set_real_ip_from ${REAL_IP_FROM};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    # Admin uploads carry up to ADMIN_UPLOAD_MAX_BYTES (100 MB) plus multipart framing.
+    client_max_body_size 110m;
+
+    include /etc/nginx/conf.d/wordfall-headers.inc;
+
+    location /api/ {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        proxy_pass http://${BACKEND_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    location = /health {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        proxy_pass http://${BACKEND_UPSTREAM};
+    }
+
+    # New app versions must be picked up.
+    location = /service-worker.js {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        add_header Cache-Control "no-cache" always;
+    }
+
+    location = /index.html {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        add_header Cache-Control "no-cache" always;
+    }
+
+    # Hashed assets never change.
+    location /_app/immutable/ {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location / {
+        include /etc/nginx/conf.d/wordfall-headers.inc;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ /index.html;
+    }
+}
