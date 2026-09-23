@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7d — Local-first player: service worker (in progress)
-- **Last green checkpoint:** Phase 7c — download manager
+- **Phase:** 7e — Local-first player: the player (next to start)
+- **Last green checkpoint:** Phase 7d — service worker
 
 ## Environment notes (this machine)
 
@@ -304,10 +304,21 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 - Runtime runs the manager after each pull without blocking the cycle.
 - Tests: `lib/sync/downloads.test.ts` (16).
 
+### Phase 7d — Service worker ✅
+- `src/service-worker.ts` (precache build + files + /index.html; every app
+  navigation → cached shell; /api and unrecognised requests untouched; no
+  skipWaiting on install, only on SKIP_WAITING; old build caches deleted
+  only when no page reports that build, re-checked on CLOSING),
+  `lib/sw/logic.ts` (pure routing and cache decisions, tested),
+  `lib/sw/client.svelte.ts` ("a new version is ready" offer; only the tab
+  that asked reloads on controllerchange; others show "updated in another
+  tab"; HELLO/CLOSING with the build version). Layout banners.
+- e2e `shell.spec.ts`: shell loads offline once the worker controls the page.
+
 ## Next
 
 Phase 7 — Local-first player, split into sub-milestones, each committed at
-green: (done: 7a, 7b, 7c) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
+green: (done: 7a–7d) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
 temporary `lib/local/device.ts`), base/overlay/staging/outbox and
 `applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
 paged pull, rebase, notices, resync); **7c** download manager (window,

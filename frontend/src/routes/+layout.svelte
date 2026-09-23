@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { initSession, session } from '$lib/auth/session.svelte';
 	import { startSync } from '$lib/sync/runtime.svelte';
+	import { applyUpdate, updates, watchUpdates } from '$lib/sw/client.svelte';
 
 	let { children } = $props();
 
@@ -22,6 +23,7 @@
 
 	onMount(() => {
 		initSession();
+		void watchUpdates();
 	});
 
 	// Sync runs while an account is signed in and this tab still belongs to it.
@@ -44,7 +46,13 @@
 </svelte:head>
 
 <div class="min-h-screen bg-background text-foreground">
-	{#if session.updatedInAnotherTab}
+	{#if updates.ready && !updates.updatedElsewhere}
+		<p role="status" class="bg-muted px-4 py-2 text-center text-sm">
+			A new version is ready.
+			<button class="underline" onclick={applyUpdate}>Reload</button>
+		</p>
+	{/if}
+	{#if session.updatedInAnotherTab || updates.updatedElsewhere}
 		<!-- PLAN.md § On the device: the old build's tab keeps running and never reloads by itself. -->
 		<p role="status" class="bg-muted px-4 py-2 text-center text-sm">
 			Wordfall was updated in another tab — reload to continue
