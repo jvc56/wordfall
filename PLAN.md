@@ -2504,18 +2504,16 @@ which alarms. Then:
    `sync_devices.acked_below`, raising it with each request that carries
    operations (a retried batch after a lost response starts at the same
    `device_seq`, so it raises nothing). In the same transaction it deletes that
-   device's records below the mark that were **applied** and whose operations
-   return **no result fields** — every kind but `finish`, `finish_segment` and
-   `restore_quiz` — since a repeat of one of those needs only the answer
-   "applied". Everything else is kept for `SYNC_RETENTION_DAYS`: the three
-   result-bearing kinds, because their outcome, count and hash must come back
-   unchanged, and every **rejected** record, because its reason must; both are
-   a few per attempt. An operation that arrives **below its device's mark with
-   no record** was therefore applied — only a stale resend can arrive there,
-   from a second tab that read the outbox before the rebase dropped it where
-   Web Locks are missing — and it is answered `applied`, exactly as the first
-   time, and **not applied again**, so a replayed grade can never overwrite the
-   newer grade the same device made after it. Records past
+   device's records **below the mark whose operations return no result
+   fields** — every kind but `finish`, `finish_segment` and `restore_quiz`, for
+   which a repeat needs only "applied" or the rejection's reason. The three
+   result-bearing kinds are kept for `SYNC_RETENTION_DAYS`, since their
+   outcome, count and hash must come back unchanged, and there are a few per
+   attempt. An operation that arrives **below its device's mark with no
+   record** — only a stale resend can, from a second tab that read the outbox
+   before the rebase dropped it where Web Locks are missing — is answered
+   `applied` and **not applied again**, so a replayed grade can never overwrite
+   the newer grade the same device made after it. Records past
    `SYNC_RETENTION_DAYS` go too, so an operation older than that, which only a
    device offline that long can resend, is applied afresh; that is almost
    always a `stale_attempt` or `not_cleared` rejection, and such a device is
@@ -3623,10 +3621,10 @@ CREATE INDEX quiz_attempts_user_seq ON quiz_attempts (user_id, updated_seq);
 -- Sync bookkeeping
 -- -------------------------------------------------------------------------
 
--- Operations received, so a repeated operation is recognised. An applied record whose
--- operation returns no result fields is deleted once its device has shown it received the
--- result (below sync_devices.acked_below); finish, finish_segment and restore_quiz records,
--- and every rejected record, are kept for SYNC_RETENTION_DAYS. See The sync cycle.
+-- Operations received, so a repeated operation is recognised. A record whose operation
+-- returns no result fields is deleted once its device has shown it received the result
+-- (below sync_devices.acked_below); finish, finish_segment and restore_quiz records are
+-- kept for SYNC_RETENTION_DAYS. See The sync cycle.
 -- Looked up by (user_id, id): an id another user has already used is rejected, never replayed.
 CREATE TABLE sync_operations (
     id           UUID PRIMARY KEY,                -- device-generated operation id
@@ -3652,8 +3650,8 @@ CREATE INDEX sync_operations_received_at ON sync_operations (received_at);
 
 -- Per device, the device_seq below which every operation is known to have been
 -- acknowledged: raised to the lowest device_seq of each request that carries
--- operations. An operation below it with no record was applied, and is answered
--- applied and not applied again.
+-- operations. An operation below it with no record is answered applied and not
+-- applied again.
 CREATE TABLE sync_devices (
     user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     device_id    UUID NOT NULL,
@@ -4437,7 +4435,7 @@ startup rather than falling back to a default.
 | `SEARCH_TIMEOUT_MS` | `2000` | |
 | `SEARCH_CONCURRENCY` | `2` | Searches running at once per instance, sized to the task's vCPUs. A request waiting longer than `SEARCH_TIMEOUT_MS` for a permit gets `503` with `Retry-After`, never `422` |
 | `TRASH_RETENTION_DAYS` | `30` | Y: how long cleared quizzes and trashed cascades stay in the Trash |
-| `SYNC_RETENTION_DAYS` | `90` | How long tombstones, rejected operation records and the records of `finish`, `finish_segment` and `restore_quiz` are kept; applied records of other operations are deleted once their device has acknowledged them (see [The sync cycle](#the-sync-cycle)) |
+| `SYNC_RETENTION_DAYS` | `90` | How long operation records and tombstones are kept |
 | `SYNC_MAX_OPS` | `500` | Operations accepted per sync request; a request carrying more is a `400` |
 | `MIN_APP_VERSION` | `0` | The lowest frontend build number `/api/sync` accepts. `0` refuses nothing; raising it is a deploy-time change, made only when a sync API change cannot stay compatible, and a request below it gets `426` after its operations are applied |
 | `PURGE_INTERVAL_SECONDS` | `3600` | |
@@ -4651,11 +4649,10 @@ See [What the tests reuse](#what-the-tests-reuse).
   operations per card (a grade and, online, its own cursor move), at roughly
   250 bytes a record with its indexes, so keeping every record for 90 days
   would hold about 150 MB for each 300,000-card pass, ten times the cascade it
-  describes. Applied records of result-free operations are therefore deleted as
-  soon as their device has acknowledged them (see
-  [The sync cycle](#the-sync-cycle)), so the table holds about one batch per
-  active device plus a few `finish`, `finish_segment`, `restore_quiz` and
-  rejected records per attempt. Task memory is sized
+  describes. Records of result-free operations are therefore deleted as soon as
+  their device has acknowledged them (see [The sync cycle](#the-sync-cycle)), so
+  the table holds about one batch per active device plus a few `finish`,
+  `finish_segment` and `restore_quiz` records per attempt. Task memory is sized
   to the catalog, and each index's size is visible in `/admin`.
 - **Monitoring**: sync rejections are counted by type and reason in logs and
   graphed. A rise in rejections outside the expected `stale_attempt`, `stale`,
@@ -5338,14 +5335,6 @@ they run in parallel and leave nothing behind.
   - A repeated operation is applied once and gets the same result in every
     field, `outcome`, `new_quiz_question_count` and `new_quiz_questions_hash`
     included.
-  - Record pruning: a batch whose response is lost and which is sent again
-    starting at the same `device_seq` gets every recorded result back; the next
-    batch raises `sync_devices.acked_below` and deletes the earlier batch's
-    **applied** grade and cursor records while keeping its `finish` record and
-    its **rejected** grade, which a later resend gets back with the same
-    reason; and a stale resend of an acknowledged grade from below the mark,
-    after the same device regraded that question, is answered `applied` and
-    leaves the newer grade in place.
   - A `finish` whose `shuffle_seed` and resulting `questions_hash` are both
     **above 2⁶³** is applied, stored as negative `BIGINT`s, and answered — and
     then pulled, and fetched again as a repeat — with the unsigned decimal text
@@ -5952,10 +5941,6 @@ environment. That is how a deployment is smoke-tested and how the
     and grade rows for unchanged attempts written once); and each cascade
     materialises on open within budget. The budgets are constants in the test beside the row
     counts they measure.
-  - Drain two 300,000-grade attempts through sync, online-style with a cursor
-    move per card, and assert `sync_operations` ends holding no more than one
-    batch of result-free records plus the attempts' `finish` and rejected
-    records, where keeping every record would have held 1.2 million rows.
   - Ten concurrent `GET /api/cascades/:id/export` streams of a 300,000-question
     anagram cascade with definitions, the `EXPORT_RATE_PER_MINUTE` default,
     complete within budget without the task exceeding its memory reservation.
