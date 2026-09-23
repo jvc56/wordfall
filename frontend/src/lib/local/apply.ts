@@ -98,7 +98,7 @@ function optsOf(r: { segment_size: number; progression: Progression; require_alp
 	return { segment_size: r.segment_size, progression: r.progression, require_alphabetical: r.require_alphabetical };
 }
 
-function cascadeState(c: CascadeRow): CascadeState {
+export function cascadeState(c: CascadeRow): CascadeState {
 	return {
 		clear_threshold: c.clear_threshold,
 		opts: optsOf(c),
@@ -109,7 +109,7 @@ function cascadeState(c: CascadeRow): CascadeState {
 	};
 }
 
-function quizState(q: QuizRow): QuizState {
+export function quizState(q: QuizRow): QuizState {
 	return {
 		level: q.level,
 		origin: q.origin,

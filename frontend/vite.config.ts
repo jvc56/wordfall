@@ -39,6 +39,8 @@ export default defineConfig({
 	server: {
 		proxy: { '/api': process.env.WORDFALL_API ?? 'http://localhost:5173' }
 	},
+	// Component tests mount Svelte's browser build.
+	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
 	test: {
 		include: ['src/**/*.test.ts'],
 		environment: 'node'

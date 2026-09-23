@@ -375,6 +375,28 @@ export class DownloadManager {
 		}
 		for (const from of froms) {
 			const page = await this.page(() => this.api.cards(c.id, from, CARDS_PAGE, hooks, definitions));
+			await this.writeCards(c, page, hooks, definitions);
+			this.opts.onProgress?.(cascadeId);
+		}
+	}
+
+	/**
+	 * The page the player needs on the current card, ahead of any download:
+	 * the manager starts nothing while it is outstanding (§ Downloads).
+	 */
+	async fetchForPlayer(cascadeId: string, idx: number): Promise<void> {
+		const c = await this.db.get('cascades', cascadeId);
+		if (!c) return;
+		const prefs = await preferencesView(this.db);
+		const hooks = c.quiz_type === 'anagram' && prefs.anagram_show_hooks;
+		const definitions = c.quiz_type === 'anagram' && prefs.anagram_show_definitions;
+		const from = Math.floor(idx / CARDS_PAGE) * CARDS_PAGE;
+		const page = await this.forPlayer(() => this.api.cards(c.id, from, CARDS_PAGE, hooks, definitions));
+		await this.writeCards(c, page, hooks, definitions);
+	}
+
+	private async writeCards(c: CascadeRow, page: { idx: number; key: string; answer: unknown }[], hooks: boolean, definitions: boolean) {
+		{
 			await this.unit(async () => {
 				const tx = this.db.transaction(['cards', 'questions', 'meta'], 'readwrite');
 				let answerBytes = 0;
@@ -393,7 +415,6 @@ export class DownloadManager {
 				await addSize(tx as unknown as RwTx, c.id, keyBytes, answerBytes);
 				await tx.done;
 			});
-			this.opts.onProgress?.(cascadeId);
 		}
 	}
 

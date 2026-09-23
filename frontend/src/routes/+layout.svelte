@@ -7,6 +7,7 @@
 	import { initSession, session } from '$lib/auth/session.svelte';
 	import { startSync } from '$lib/sync/runtime.svelte';
 	import { applyUpdate, updates, watchUpdates } from '$lib/sw/client.svelte';
+	import Notices from '$lib/components/Notices.svelte';
 
 	let { children } = $props();
 
@@ -58,6 +59,7 @@
 			Wordfall was updated in another tab — reload to continue
 		</p>
 	{/if}
+	<Notices />
 	{#if session.ready}
 		{@render children()}
 	{/if}

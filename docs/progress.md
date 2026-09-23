@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7e — Local-first player: the player (next to start)
-- **Last green checkpoint:** Phase 7d — service worker
+- **Phase:** 7f — Cascades, Trash and Account pages (next to start)
+- **Last green checkpoint:** Phase 7e — the player
 
 ## Environment notes (this machine)
 
@@ -314,6 +314,28 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   that asked reloads on controllerchange; others show "updated in another
   tab"; HELLO/CLOSING with the build version). Layout banners.
 - e2e `shell.spec.ts`: shell loads offline once the worker controls the page.
+
+### Phase 7e — The player ✅
+- `lib/player/controller.ts` (state machine over the local view: reveal /
+  toggle / save-and-advance, move_cursor, finish_segment at a run's last
+  card and finish at the attempt's, Previous never below run_start with the
+  "already finished this part" line, missing key → "needs a connection",
+  moved past with nothing emitted, run end waits with a count; missing
+  answer → flashcard fallback; quota → storage message and retry; on-demand
+  card page via `DownloadManager.fetchForPlayer`; `refreshCard` on download
+  progress), `typed.ts`, `bindings.ts` (strokes, input protection, bind /
+  unbind rules, debounce), `banner.ts`, `ladder.ts`.
+- Components: `CascadeLadder.svelte` (collapse above 12; compact form),
+  `player/AnswerView.svelte`, `SyncStatus.svelte`, `Notices.svelte`
+  (layout-wide). Route `/cascades/[id]`: desktop rails / touch zones,
+  mouse/wheel/key bindings, typed input with the three-button row, settings
+  (preferences + quiz options), completion screen (Keep studying, Start over,
+  Move to Trash), trashed → Restore, Web Lock `wordfall-player-<id>`.
+- Runtime: `changed` signal (step 5 refresh), `progress`, `fetchCard`,
+  `ensureCascade` in any tab. Vitest: jsdom + @testing-library/svelte
+  (`resolve.conditions: ['browser']` under VITEST).
+- Tests: `lib/player/player.test.ts` (14), `CascadeLadder.test.ts` (2);
+  e2e `player.spec.ts` (study with keys, offline, reload offline, drain).
 
 ## Next
 
