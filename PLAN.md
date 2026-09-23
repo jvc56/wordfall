@@ -4437,7 +4437,7 @@ startup rather than falling back to a default.
 | `SEARCH_TIMEOUT_MS` | `2000` | |
 | `SEARCH_CONCURRENCY` | `2` | Searches running at once per instance, sized to the task's vCPUs. A request waiting longer than `SEARCH_TIMEOUT_MS` for a permit gets `503` with `Retry-After`, never `422` |
 | `TRASH_RETENTION_DAYS` | `30` | Y: how long cleared quizzes and trashed cascades stay in the Trash |
-| `SYNC_RETENTION_DAYS` | `90` | How long operation records and tombstones are kept |
+| `SYNC_RETENTION_DAYS` | `90` | How long tombstones, rejected operation records and the records of `finish`, `finish_segment` and `restore_quiz` are kept; applied records of other operations are deleted once their device has acknowledged them (see [The sync cycle](#the-sync-cycle)) |
 | `SYNC_MAX_OPS` | `500` | Operations accepted per sync request; a request carrying more is a `400` |
 | `MIN_APP_VERSION` | `0` | The lowest frontend build number `/api/sync` accepts. `0` refuses nothing; raising it is a deploy-time change, made only when a sync API change cannot stay compatible, and a request below it gets `426` after its operations are applied |
 | `PURGE_INTERVAL_SECONDS` | `3600` | |
