@@ -13,6 +13,7 @@ pub mod leave;
 pub mod net;
 pub mod purge;
 pub mod rate;
+pub mod export;
 pub mod search;
 pub mod sync;
 

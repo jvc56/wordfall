@@ -68,6 +68,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(crate::search::saved::router())
         .merge(crate::cascade::routes::router())
         .merge(crate::sync::routes::router())
+        .merge(crate::export::routes())
         .layer(DefaultBodyLimit::max(api_limit))
         .layer(CompressionLayer::new().gzip(true).br(true))
         .with_state(state)

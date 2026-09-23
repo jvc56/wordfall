@@ -65,6 +65,7 @@ onUpdatedElsewhere(() => {
 });
 
 let channel: BroadcastChannel | null = null;
+let onlineHooked = false;
 
 export async function initSession() {
 	const id = await signedIn();
@@ -78,6 +79,14 @@ export async function initSession() {
 		await retryQueuedLogout(sendQueuedLogout);
 	}
 	session.ready = true;
+
+	// A queued logout is retried at the next connection on which no account is signed in.
+	if (!onlineHooked) {
+		onlineHooked = true;
+		addEventListener('online', () => {
+			if (!session.userId) void retryQueuedLogout(sendQueuedLogout);
+		});
+	}
 
 	if (typeof BroadcastChannel !== 'undefined' && !channel) {
 		channel = new BroadcastChannel(SIGNED_IN_CHANNEL);

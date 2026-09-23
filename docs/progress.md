@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7g — Export (next to start)
-- **Last green checkpoint:** Phase 7f — Cascades, Trash and Account pages
+- **Phase:** 7h — e2e journeys and scale tests (next to start)
+- **Last green checkpoint:** Phase 7g — export
 
 ## Environment notes (this machine)
 
@@ -351,6 +351,29 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   (clamped to the cap), cascade-count warning and limit.
 - Tests: `lib/cascades/summary.test.ts` (4); e2e `pages.spec.ts`.
 - Export… buttons link to `/cascades/:id/export` (7g).
+
+### Phase 7g — Export ✅
+- Contract: `contract-fixtures/tools/gen_export.py` (independent reference
+  from the plan's text) → `contract-fixtures/export/cases.json` (329 cases:
+  three types, four selections, both formats, both orders, empty files,
+  MAGPIE tiles, CSV quoting, ` / ` and ` | ` in definitions, four front
+  hooks, leave values at 0–3 decimals, filenames with `·`/`–`, a non-BMP
+  character and >100 chars, cascade-wide union, a quiz in the Trash).
+- Rust `backend/src/export/format.rs` (chunked `format_each`) and TS
+  `frontend/src/lib/export/format.ts` (generator) both pass every case.
+- Server `backend/src/export/mod.rs`: `POST …/export-token` (session,
+  binding, 404s, EXPORT_RATE_PER_MINUTE; PASETO under the HKDF export key
+  with a SHA-256 of the canonical choices, 60 s, jti) and
+  `GET …/export` (204 for expired/reused/mismatched; `export_tokens_spent`
+  records the one use; streams through a channel from a blocking task;
+  Content-Disposition filename). Added `tokio-stream`.
+- Device: `lib/export/local.ts` (input from local stores or what is
+  missing), `worker.ts` (chunks → Blob), route `/cascades/[id]/export`
+  (dialog, live count, materialise first, server fallback through a hidden
+  iframe, offline → "questions alone"), player ladder Export….
+  `DownloadManager.materialiseQuiz(…, force)` fetches a cleared quiz's rows.
+- Tests: Rust fixture test; `tests/export.rs` (7); Vitest fixtures (329) +
+  `local.test.ts` (5); e2e downloads (local and server paths).
 
 ## Next
 

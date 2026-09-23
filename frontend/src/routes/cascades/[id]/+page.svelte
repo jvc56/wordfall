@@ -346,7 +346,13 @@
 			<p>clear at {v.cascade.clear_threshold}%</p>
 			{#if run}<p>{run}</p>{/if}
 		</div>
-		<div class="mt-4"><CascadeLadder {rows} /></div>
+		<div class="mt-4">
+			<CascadeLadder
+				{rows}
+				onOptions={() => openSettings()}
+				onExport={(r) => goto(`/cascades/${id}/export?quiz=${r.quiz.id}`)}
+			/>
+		</div>
 	{/if}
 	<Button variant="ghost" class="mt-4" onclick={openSettings}>⚙ Preferences</Button>
 {/snippet}

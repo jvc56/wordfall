@@ -21,7 +21,7 @@
 	import { getMeta } from '$lib/local/meta';
 	import { preferencesView } from '$lib/local/preferences';
 	import type { PreferencesRow } from '$lib/local/rows';
-	import { syncState } from '$lib/sync/runtime.svelte';
+	import { syncNow, syncState } from '$lib/sync/runtime.svelte';
 
 	let current = $state('');
 	let next = $state('');
@@ -116,8 +116,13 @@
 
 	async function doLogout() {
 		const id = session.userId;
+		// The app tries to sync first, then always completes locally.
+		if (navigator.onLine) await Promise.race([syncNow(), new Promise((r) => setTimeout(r, 5000))]).catch(() => undefined);
 		await logout();
-		if (removeData && id) await removeAccountData(id);
+		if (removeData && id) {
+			closeUserDb();
+			await removeAccountData(id);
+		}
 		await goto('/login', { replaceState: true });
 	}
 
@@ -139,6 +144,17 @@
 				<Checkbox id="remove-data" bind:checked={removeData} />
 				<Label for="remove-data">Remove this account's data from this device</Label>
 			</div>
+			{#if syncState.pending > 0}
+				<p class="text-sm" role="status">
+					{syncState.pending === 1 ? '1 change hasn’t' : `${syncState.pending} changes haven’t`} synced yet. {syncState.pending === 1 ? 'It' : 'They'}
+					will sync the next time you log in on this device.
+				</p>
+				{#if removeData}
+					<p class="text-sm text-destructive">
+						Removing this account’s data discards {syncState.pending === 1 ? 'that change' : `those ${syncState.pending} changes`}.
+					</p>
+				{/if}
+			{/if}
 			<Button variant="outline" onclick={doLogout}>Log out</Button>
 			<SyncStatus />
 		</Card.Content>

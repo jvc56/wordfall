@@ -156,6 +156,13 @@ export function afterLocalWrite() {
 
 let currentUser: string | null = null;
 
+/** A sync now, in the leader tab; elsewhere, a request to the leader. */
+export async function syncNow() {
+	if (engine) await engine.sync();
+	else post({ kind: 'kick' });
+	await refreshPending();
+}
+
 /** Operations waiting in the outbox, for "3 changes waiting to sync". */
 export async function refreshPending() {
 	if (!currentUser) return;

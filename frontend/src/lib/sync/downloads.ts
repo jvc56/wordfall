@@ -244,7 +244,7 @@ export class DownloadManager {
 	 * quiz), positions, hash check; the pending flag is cleared only by all of
 	 * it, and only when the grades fetched number `correct_count + missed_count`.
 	 */
-	async materialiseQuiz(cascade: CascadeRow, quiz: QuizRow): Promise<boolean> {
+	async materialiseQuiz(cascade: CascadeRow, quiz: QuizRow, force = false): Promise<boolean> {
 		const seq = (await getMeta(this.db, 'sync')).cursor ?? 0;
 		// 1. The index list (a Source quiz's is implied).
 		let idx: number[];
@@ -267,11 +267,12 @@ export class DownloadManager {
 		let grades: Map<number, { grade: 'correct' | 'missed'; graded_at: string }> | null = null;
 		let current = quiz;
 		const graded = quiz.correct_count + quiz.missed_count;
-		if (quiz.pending && graded > 0) {
+		if ((quiz.pending || force) && graded > 0) {
 			for (let tries = 0; tries < 2 && !grades; tries++) {
 				await this.opts.sync?.();
 				current = (await this.db.get('quizzes', quiz.id)) ?? quiz;
-				if (current.status !== 'active') return false;
+				// A restore or an export fetches a cleared quiz's rows too.
+				if (current.status !== 'active' && !force) return false;
 				const fetched = new Map<number, { grade: 'correct' | 'missed'; graded_at: string }>();
 				let mismatch = false;
 				for (let from = 0; from < cascade.question_count && !mismatch; from += INDEX_PAGE) {
