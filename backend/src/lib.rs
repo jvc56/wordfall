@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod extract;
 pub mod health;
+pub mod leave;
 pub mod net;
 pub mod purge;
 pub mod rate;

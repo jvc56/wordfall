@@ -130,3 +130,19 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   canonical order — which is also what the plan's type-change recount test
   describes. Words that parse but are not in the lexicon are ignored by the
   server's search as the plan says.
+
+## PQ-011 — "exactly 8 chain quizzes" from 40 questions at S = 5 (open)
+
+- **Plan:** Contract fixtures (4822–4824): "an attempt of 40 questions with
+  S = 5 and every run missing something creating exactly 8 chain quizzes, the
+  `ceil(question_count / S)` bound"; Segments (292–297): only a run that is
+  **not the last run** descends as a chain quiz, and "the last run always ends
+  at the last question, where finishing the attempt applies the rules above".
+- **Issue:** 40 / 5 has 7 boundaries strictly inside the quiz, so the rules
+  create 7 segment (chain) quizzes; the 8th run's misses go to the `finish`,
+  which creates one descent (or replacement) quiz, not a chain quiz. The bound
+  `ceil(q / S)` is met by the attempt's created quizzes, 7 + 1 = 8.
+- **Provisional choice:** the rules as written. The vector
+  (`contract-fixtures/cascade/rules.json`, "the ceil(question_count / S)
+  bound") and both modules' tests assert 8 quizzes created by the attempt, of
+  which 7 are segment chains.

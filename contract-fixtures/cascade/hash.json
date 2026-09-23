@@ -1,0 +1,57 @@
+{
+ "source": "contract-fixtures/tools/reference.py (FNV-1a 64, little-endian u32 indexes)",
+ "hashes": [
+  {
+   "name": "one question",
+   "idx": [
+    0
+   ],
+   "hash": "5558979605539197941",
+   "above_2_53": true,
+   "above_2_63": false
+  },
+  {
+   "name": "three questions",
+   "idx": [
+    1,
+    2,
+    3
+   ],
+   "hash": "18239313798490686357",
+   "above_2_53": true,
+   "above_2_63": true
+  },
+  {
+   "name": "three questions differing in one index",
+   "idx": [
+    1,
+    2,
+    4
+   ],
+   "hash": "2102911828157386210",
+   "above_2_53": true,
+   "above_2_63": false
+  },
+  {
+   "name": "sparse",
+   "idx": [
+    299999,
+    7,
+    12345
+   ],
+   "hash": "5441248937674454065",
+   "above_2_53": true,
+   "above_2_63": false
+  },
+  {
+   "name": "300,000-question Source quiz",
+   "idx_range": [
+    0,
+    300000
+   ],
+   "hash": "6335747888584355237",
+   "above_2_53": true,
+   "above_2_63": false
+  }
+ ]
+}
