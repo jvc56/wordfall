@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 4 — Search engine (next to start)
-- **Last green checkpoint:** Phase 3 — Catalog
+- **Phase:** 5 — Cascade builder (next to start)
+- **Last green checkpoint:** Phase 4 — Search engine
 
 ## Environment notes (this machine)
 
@@ -139,20 +139,55 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   connections must not come from `state.db` (hence the listener's own pool).
   Integration suite takes ~2 min.
 
+### Phase 4 — Search engine ✅
+- `backend/src/search/`: `wire.rs` (QuizType, GroupOp, ConditionType with
+  negatable/is_limit/applies_to/fields; strict JSON parse of the filter tree
+  with extra-field refusal and `PathError {path, field, message}`;
+  deterministic `tree_to_json` via serde_json `preserve_order`),
+  `pattern.rs` (canonical token grammar, `tokenize` without a distribution,
+  `parse` against one, TileSet bitset, anagram/subanagram `Bag` with
+  backtracking slot assignment, in-order DP matcher), `validate.rs` (group
+  rules: ≤100 rows, ≤100 groups incl. top, depth ≤4, non-empty; per-row
+  applicability, negation, ranges vs floor/ceiling with "narrows nothing",
+  ceilings from target: 15/6, 15×/6× max tile value, max_num_anagrams,
+  max_order_rank, word/leave count; canonical tiles/patterns, 500-char
+  limit, `?` → "use `.` for any single tile", In Word List 300,000 total on
+  the crossing row, entries ≤300 chars, invalid entries ignored, leave order
+  checked; save mode = no target), `engine.rs` (shortcuts: top AND Length
+  buckets + literal anagram; AND/OR group semantics; limits per kind with
+  strict/lax reduce, widening capped by strict, kinds intersected; deadline
+  check every 4,096 candidates and before each ranking; questions), `routes.rs`
+  (`POST /api/search/preview` → `{count, sample, over_cap}`; `prepare()` and
+  `run()` reusable by cascade creation; semaphore wait ≤ SEARCH_TIMEOUT_MS →
+  503 Retry-After; deadline → 422 `search_too_broad`).
+- Tests: `src/search/tests.rs` (Zyzzyva examples, inner hooks, groups, both
+  limit kinds, lax/strict, limits, leave value, leaves, In Lexicon negated,
+  validation messages, word-list totals, canonical length limit, deadline,
+  proptest: shortcuts==full scan for words and leaves, negation partitions,
+  OR/AND/limit subsets, literal anagram == alphagram entry);
+  `tests/search.rs` (preview, path errors, 503 semaphore, search bucket,
+  account binding).
+- Parity: `fixtures/parity/searches.json` (13 single-AND searches incl.
+  two-tile Not Includes and Length 7–8 + Limit 1–100), `deviations.json`,
+  `scripts/parity.py` (skips without licensed data, printing each search in
+  Zyzzyva form; with data: stack up, seed CSW24, create Definition cascades,
+  read keys, compare with `zyzzyva/<name>.txt`, print index sizes/times and
+  search times). Uses Phase 5 endpoints.
+
 ## Next
 
-Phase 4 — Search engine. Re-read: Filters (1287–1566) incl. Groups, Pattern
-syntax, Filter reference, lax rules, applicability; Search Engine
-(1701–1816); Schema filter specs (3269–3433); API → Catalog and search
-(4101–4165: preview, searches, filter JSON + parameter table); Configuration
-(SEARCH_TIMEOUT_MS, SEARCH_CONCURRENCY, SEARCH_RATE_PER_MINUTE); Unit tests
-backend search list (4888–4999); Zyzzyva parity (5992–6008); integration test
-"Search concurrency". Build `backend/src/search/` (spec types, JSON wire
-parse with extra-field refusal, validation keyed by path, candidate
-shortcuts, evaluation, limits with lax/strict + intersection of kinds,
-cooperative timeout every 4,096 candidates, questions), `POST
-/api/search/preview`, semaphore + 503, property tests (add `proptest`
-dev-dep), parity scaffold in `scripts/parity.py`.
+Phase 5 — Cascade builder. Re-read: UX → Creating a cascade (463–550), Quiz
+options (178–237), Cascade limit (405–427), Filter applicability (1509–1566),
+Cascades → Questions stored once (1819–1829), Deterministic shuffles
+(1830–1867) (Source quiz seed/shuffle on creation), Working at 300,000
+(1924–1964), API → Catalog and search (4101–4165: saved searches) and
+Cascades and sync (4166–4253: POST /api/cascades, start-over, cards incl.
+keys=1), Frontend (4271–4415: FilterGroup, FilterRow, TilePalette, TileText,
+QuizOptionsForm, WordListEditor), Schema filter specs + cascades, Testing →
+Contract fixtures (4875–4882 filter contract), Integration tests: schema
+round-trip tests, saved-search tests, cascade creation tests, card page tests.
+Write `contract-fixtures/filters/` from the parameter table with an
+independent generator in `contract-fixtures/tools/` FIRST.
 
 ## Open PQs
 

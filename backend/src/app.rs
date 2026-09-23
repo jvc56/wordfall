@@ -27,6 +27,8 @@ pub struct AppState {
     pub mailer: Arc<dyn Mailer>,
     pub email_caps: Arc<EmailCaps>,
     pub catalog: Arc<Catalog>,
+    /// `SEARCH_CONCURRENCY` permits, taken before `spawn_blocking`.
+    pub search_permits: Arc<tokio::sync::Semaphore>,
     /// Set once every catalog item present at startup has been indexed.
     pub catalog_ready: Arc<AtomicBool>,
     /// Argon2 verifies run by login, for the log and the rate-limit tests.
@@ -44,6 +46,7 @@ impl AppState {
             clock,
             mailer,
             catalog: Arc::new(Catalog::default()),
+            search_permits: Arc::new(tokio::sync::Semaphore::new(config.search_concurrency as usize)),
             config: Arc::new(config),
             catalog_ready: Arc::new(AtomicBool::new(false)),
             argon2_verifies: Arc::new(AtomicU64::new(0)),
@@ -61,6 +64,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(crate::health::health))
         .merge(crate::auth::routes::router())
         .merge(crate::catalog::routes::router(&state))
+        .merge(crate::search::routes::router())
         .layer(DefaultBodyLimit::max(api_limit))
         .layer(CompressionLayer::new().gzip(true).br(true))
         .with_state(state)

@@ -11,5 +11,6 @@ pub mod health;
 pub mod net;
 pub mod purge;
 pub mod rate;
+pub mod search;
 
 pub use app::{AppState, build_router};

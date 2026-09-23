@@ -17,7 +17,7 @@ hkdf = "0.13.0"
 pasetors = "0.8.1"
 rand = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 sha2 = "0.11.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "migrate", "macros", "tls-none"] }
 thiserror = "2.0.20"
@@ -32,6 +32,7 @@ zxcvbn = "3.1.1"
 [dev-dependencies]
 bytes = "1.12.1"
 http-body-util = "0.1.5"
+proptest = "1.11.0"
 
 # Argon2 is slow unoptimised; tests hash on every registration and login.
 [profile.dev.package.argon2]

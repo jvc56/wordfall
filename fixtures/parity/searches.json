@@ -1,0 +1,53 @@
+[
+  { "name": "mixed_length_limit",
+    "note": "Length 7-8 with Limit by Probability Order 1-100: the limit ranks 7s and 8s together by raw combinations",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 7, "max": 8 },
+      { "type": "limit_by_probability_order", "negated": false, "min": 1, "max": 100, "lax": true } ] } },
+  { "name": "not_includes_two_tiles",
+    "note": "Not Includes AE matches words that lack an A or lack an E",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 5, "max": 5 },
+      { "type": "includes_letters", "negated": true, "tiles": "AE" } ] } },
+  { "name": "q_without_u",
+    "filters": { "op": "and", "children": [
+      { "type": "includes_letters", "negated": false, "tiles": "Q" },
+      { "type": "includes_letters", "negated": true, "tiles": "U" } ] } },
+  { "name": "length7_probability_1_100",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 7, "max": 7 },
+      { "type": "probability_order", "negated": false, "min": 1, "max": 100, "lax": true } ] } },
+  { "name": "length8_playability_1_200",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 8, "max": 8 },
+      { "type": "playability_order", "negated": false, "min": 1, "max": 200, "lax": true } ] } },
+  { "name": "anagram_etx",
+    "filters": { "op": "and", "children": [
+      { "type": "anagram_match", "negated": false, "pattern": "E T X ." } ] } },
+  { "name": "pattern_w_m_s",
+    "filters": { "op": "and", "children": [
+      { "type": "pattern_match", "negated": false, "pattern": ". W * M . S" } ] } },
+  { "name": "subanagram_lx",
+    "filters": { "op": "and", "children": [
+      { "type": "subanagram_match", "negated": false, "pattern": "L X ." } ] } },
+  { "name": "consists_of_vowels",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 2, "max": 8 },
+      { "type": "consists_of", "negated": false, "tiles": "AEIOU", "min": 70, "max": 100 } ] } },
+  { "name": "point_value_high_fives",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 5, "max": 5 },
+      { "type": "point_value", "negated": false, "min": 20, "max": 75 } ] } },
+  { "name": "takes_prefix_re",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 5, "max": 5 },
+      { "type": "takes_prefix", "negated": false, "tiles": "RE" } ] } },
+  { "name": "interjections",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 2, "max": 4 },
+      { "type": "part_of_speech", "negated": false, "part_of_speech": "interjection" } ] } },
+  { "name": "definition_fish",
+    "filters": { "op": "and", "children": [
+      { "type": "length", "negated": false, "min": 3, "max": 4 },
+      { "type": "definition", "negated": false, "text": "fish" } ] } }
+]
