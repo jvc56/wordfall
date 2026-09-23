@@ -86,17 +86,111 @@ impl TestApp {
         Self::with_config(pool, test_config(overrides)).await
     }
 
+    /// A running instance: its startup catalog load done and its background
+    /// catalog tasks (LISTEN, reconcile, heartbeat) running.
     pub async fn with_config(pool: sqlx::PgPool, config: Config) -> Self {
         let app = Self::new_unready_with(pool, config).await;
-        app.state.catalog_ready.store(true, Ordering::Release);
+        wordfall::catalog::startup(&app.state)
+            .await
+            .expect("catalog startup");
+        assert!(app.state.catalog_ready.load(Ordering::Acquire));
         app
     }
 
+    /// Reconciles this instance's catalog with the database now.
+    pub async fn reconcile(&self) {
+        wordfall::catalog::reconcile(&self.state)
+            .await
+            .expect("reconcile");
+    }
+
+    /// Registers `username` as a confirmed admin and uploads the committed
+    /// fixture catalog through the admin API, as `stack.seed` does.
+    pub async fn seed_fixture_catalog(&self, username: &str) -> Client<'_> {
+        let mut admin = self.signed_in(username).await;
+        self.make_admin(username).await;
+        for item in fixture_manifest() {
+            let bytes = std::fs::read(fixture_path(&item.file)).unwrap();
+            let r = match item.kind.as_str() {
+                "distribution" => {
+                    admin
+                        .upload(
+                            "/api/admin/letter-distributions",
+                            &[("name", &item.name)],
+                            &item.file,
+                            &bytes,
+                        )
+                        .await
+                }
+                "lexicon" => {
+                    admin
+                        .upload(
+                            "/api/admin/lexicons",
+                            &[
+                                ("name", &item.name),
+                                ("letter_distribution", item.parent.as_deref().unwrap()),
+                            ],
+                            &item.file,
+                            &bytes,
+                        )
+                        .await
+                }
+                _ => {
+                    admin
+                        .upload(
+                            "/api/admin/leave-sets",
+                            &[("lexicon", &item.name)],
+                            &item.file,
+                            &bytes,
+                        )
+                        .await
+                }
+            };
+            assert_eq!(
+                r.status,
+                StatusCode::CREATED,
+                "{} {}: {:?}",
+                item.kind,
+                item.name,
+                r.json()
+            );
+        }
+        self.reconcile().await;
+        admin
+    }
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ManifestItem {
+    pub kind: String,
+    pub name: String,
+    pub file: String,
+    pub parent: Option<String>,
+}
+
+pub fn fixture_path(file: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../fixtures/catalog")
+        .join(file)
+}
+
+pub fn fixture_manifest() -> Vec<ManifestItem> {
+    serde_json::from_slice(&std::fs::read(fixture_path("manifest.json")).unwrap()).unwrap()
+}
+
+impl TestApp {
     pub async fn new_unready(pool: sqlx::PgPool) -> Self {
         Self::new_unready_with(pool, test_config(&[])).await
     }
 
     async fn new_unready_with(pool: sqlx::PgPool, config: Config) -> Self {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "warn".into()),
+            )
+            .with_test_writer()
+            .try_init();
         let mail = RecordingMailer::default();
         let state = AppState::new(pool, config, Arc::new(mail.clone()));
         let router = wordfall::build_router(state.clone());
@@ -310,5 +404,64 @@ impl<'a> Client<'a> {
 
     pub async fn delete(&mut self, path: &str, body: Value) -> TestResponse {
         self.request(Method::DELETE, path, Some(body)).await
+    }
+
+    pub async fn delete_empty(&mut self, path: &str) -> TestResponse {
+        self.request(Method::DELETE, path, None).await
+    }
+
+    /// A multipart admin upload: form fields plus one `file`.
+    pub async fn upload(
+        &mut self,
+        path: &str,
+        fields: &[(&str, &str)],
+        filename: &str,
+        file: &[u8],
+    ) -> TestResponse {
+        let boundary = "wordfall-test-boundary-7d1a";
+        let mut body = Vec::new();
+        for (k, v) in fields {
+            body.extend_from_slice(
+                format!(
+                    "--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n"
+                )
+                .as_bytes(),
+            );
+        }
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n\
+                 Content-Type: application/octet-stream\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(file);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let mut b = Request::builder()
+            .method(Method::POST)
+            .uri(path)
+            .header("x-forwarded-for", &self.ip)
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            );
+        if !self.cookies.is_empty() {
+            let cookie = self
+                .cookies
+                .iter()
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect::<Vec<_>>()
+                .join("; ");
+            b = b.header(header::COOKIE, cookie);
+        }
+        if let Some(t) = self.csrf() {
+            b = b.header("x-csrf-token", t.clone());
+        }
+        if let Some(u) = self.user_id {
+            b = b.header("x-wordfall-user", u.to_string());
+        }
+        let resp = self.app.send(b.body(Body::from(body)).unwrap()).await;
+        self.absorb(&resp);
+        resp
     }
 }

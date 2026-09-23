@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 3 — Catalog (next to start)
-- **Last green checkpoint:** Phase 2 — Accounts
+- **Phase:** 4 — Search engine (next to start)
+- **Last green checkpoint:** Phase 3 — Catalog
 
 ## Environment notes (this machine)
 
@@ -102,22 +102,57 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   token (their phases); admin-authorization test (Phase 3, first admin route).
 - Terraform: service capped at two tasks.
 
+### Phase 3 — Catalog ✅
+- `fixtures/catalog/`: `english.csv`, `catalan.csv` (MAGPIE copies),
+  `EN-FIX.tsv` (154 words: Zyzzyva help examples, SPORT/PORT/SPORTS, AEINRST
+  ×9, Q/Z/V 7s, two 15s), `EN-FIX-OLD.tsv` (150; second lexicon on english for
+  In Lexicon), `CA-FIX.tsv` (27 words with NY/QU/L·L/Ç incl. four made-up
+  15-tile words), `EN-FIX-leaves.csv` (35), `CA-FIX-leaves.csv` (10),
+  `manifest.json` (read by `stack.fixture_catalog()` and the test harness).
+  Authored with a scratch script (not committed); edit the files directly.
+- `fixtures/magpie-data/`: the 12 MAGPIE-DATA distributions at pinned commit
+  2a9d656 + `fetch.sh`.
+- `backend/src/catalog/`: `tiles.rs` (Distribution, strict MAGPIE parse,
+  typed greedy parse, canonical leave, tile order = `[u8]` Ord),
+  `probability.rs` (u128 combinations, two blanks; leave combos),
+  `pos.rs`, `index.rs` (LexiconIndex/LeaveSetIndex with every derived
+  attribute, ranks with min/max on ties, per-length/size buckets, alphagram
+  map, canonical-leave lookup, maxima, build_ms, approx_bytes),
+  `upload.rs` (validators; first 1,000 errors + total), `store.rs` (load +
+  batched UNNEST inserts + `pg_notify`), `mod.rs` (Snapshot/Catalog,
+  `startup`, `reconcile`, status rows, LISTEN on its own 1-connection pool,
+  fallback reconcile, heartbeat), `routes.rs` (`/api/lexicons` gated on every
+  live instance, `/api/letter-distributions/:name` from DB, `/api/admin/*`
+  catalog/uploads/deletes; 120 s timeout; per-IP and admin-upload limits),
+  `fixtures.rs` (cfg(test): loads fixture files into indexes for unit tests).
+- `/health` 503 until the startup load completes (backend binds first).
+- Purge task also prunes stale `catalog_instance_status`.
+- Tests: 28 lib unit tests; `tests/catalog.rs` 20 integration tests.
+- Frontend: `/admin` overview (delete actions disabled with reasons, loading
+  badges, index sizes, instances), three upload pages via
+  `components/admin/UploadForm.svelte` (XHR progress, error list),
+  `components/NotFound.svelte` for non-admins.
+- `stack.seed` waits until uploads are listed by `/api/lexicons`.
+- Gate: `./scripts/dev.py` seeds the catalog through the real admin API,
+  idempotently; restart reloads before `/health` is ready.
+- Harness note: `#[sqlx::test]` pools share a 20-connection parent; long-held
+  connections must not come from `state.db` (hence the listener's own pool).
+  Integration suite takes ~2 min.
+
 ## Next
 
-Phase 3 — Catalog. Re-read: Admin (1031–1222), Tiles (1223–1286),
-Probability (1489–1508), Catalog Indexes (1642–1700), Schema catalog
-(3193–3268), API → Catalog and search (4101–4165) and Admin (4254–4270),
-Testing → fixture catalog (4765–4781), backend unit tests (4888–4999),
-integration tests admin parts. Build the fixture catalog FIRST
-(`fixtures/catalog/` + `manifest.json` read by `stack.fixture_catalog()`:
-entries `{kind: distribution|lexicon|leaves, name, file, parent}`).
-Then: upload validators (line-numbered errors capped at 1,000 + total),
-greedy tile parsing (no backtracking), LexiconIndex/LeaveSetIndex with
-every derived attribute, LISTEN/NOTIFY reconcile, `catalog_instance_status`,
-`/health` readiness from real loading, `GET /api/lexicons`,
-`GET /api/letter-distributions/:name`, `/api/admin/*`, `/admin` pages. Check
-`stack.seed`'s `/api/admin/catalog` key assumptions
-(`letter_distributions[].name`, `lexicons[].name`, `leave_sets[].lexicon`).
+Phase 4 — Search engine. Re-read: Filters (1287–1566) incl. Groups, Pattern
+syntax, Filter reference, lax rules, applicability; Search Engine
+(1701–1816); Schema filter specs (3269–3433); API → Catalog and search
+(4101–4165: preview, searches, filter JSON + parameter table); Configuration
+(SEARCH_TIMEOUT_MS, SEARCH_CONCURRENCY, SEARCH_RATE_PER_MINUTE); Unit tests
+backend search list (4888–4999); Zyzzyva parity (5992–6008); integration test
+"Search concurrency". Build `backend/src/search/` (spec types, JSON wire
+parse with extra-field refusal, validation keyed by path, candidate
+shortcuts, evaluation, limits with lax/strict + intersection of kinds,
+cooperative timeout every 4,096 candidates, questions), `POST
+/api/search/preview`, semaphore + 503, property tests (add `proptest`
+dev-dep), parity scaffold in `scripts/parity.py`.
 
 ## Open PQs
 
@@ -125,6 +160,9 @@ every derived attribute, LISTEN/NOTIFY reconcile, `catalog_instance_status`,
 - PQ-002 (auth wire names/shapes) — provisional, non-blocking.
 - PQ-003 (sliding TTL on sync only) — provisional, non-blocking.
 - PQ-004 (governor can't peek; custom login-failure buckets) — provisional.
+- PQ-005 (/api/lexicons "startup load" test wording) — provisional.
+- PQ-006 (≤256 tiles per distribution for u8 indexes) — provisional.
+- PQ-007 (upload form errors use `line: null`) — provisional.
 
 ## Known failing tests
 

@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.id, l.letter_distribution_id,\n                EXISTS (SELECT 1 FROM leave_sets s WHERE s.lexicon_id = l.id) AS \"has_leaves!\"\n         FROM lexicons l WHERE l.name = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "lexicons",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "letter_distribution_id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "lexicons",
+            "name": "letter_distribution_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "has_leaves!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "71920175db004bc893cc4e1a319bda6f58c6b50d447daec52b04d4013013ad6b"
+}

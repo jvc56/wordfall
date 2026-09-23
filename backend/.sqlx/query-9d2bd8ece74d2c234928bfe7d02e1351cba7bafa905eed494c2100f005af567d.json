@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, lexicon_id FROM leave_sets ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "leave_sets",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "lexicon_id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "leave_sets",
+            "name": "lexicon_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9d2bd8ece74d2c234928bfe7d02e1351cba7bafa905eed494c2100f005af567d"
+}

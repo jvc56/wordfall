@@ -59,3 +59,33 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   login-failure limits use a small in-house bucket with the same quota
   semantics (`n` per minute, burst `n`) that can be inspected before it is
   spent (`backend/src/rate.rs`, `FailureBuckets`).
+
+## PQ-005 — "/api/lexicons omits an item while a second instance is still completing its startup load" (open)
+
+- **Plan:** Integration tests (5390–5393) vs. Admin → Loading changes
+  (1214–1216): "An instance writes **no** rows until its startup load is
+  complete ... so a task still booting during a deploy never makes an item
+  look unloaded".
+- **Issue:** A booting instance has no rows, so it is not "live" and cannot
+  hold an item back; the test sentence reads as if it should.
+- **Provisional choice:** follow the Admin section (the mechanism). The test
+  is written as: an item is omitted while a **live** second instance (one with
+  rows) has not yet loaded it, and listed once that instance writes its row;
+  a separate assertion checks that a booting instance hides nothing
+  (`backend/tests/catalog.rs`).
+
+## PQ-006 — A distribution's tile count is capped at 256 (open)
+
+- **Plan:** Search Engine (1737–1739) has the engine compare "small tile
+  indexes (`u8`)"; File formats sets no cap on the number of tiles.
+- **Provisional choice:** the upload validator refuses a distribution with
+  more than 256 tiles (every MAGPIE-DATA file has under 40), so a tile index
+  always fits a `u8` (`backend/src/catalog/tiles.rs`, `upload.rs`).
+
+## PQ-007 — Upload errors that belong to no line (open)
+
+- **Plan:** API → Admin: "`400` with `{ errors: [{ line, message }], total_errors }`".
+- **Issue:** Form-level problems (name taken or malformed, unknown
+  distribution or lexicon, lexicon already has leave values, missing file,
+  empty file, body too large) have no line.
+- **Provisional choice:** the same `400` shape with `line: null`.

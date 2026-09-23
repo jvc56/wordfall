@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE catalog_instance_status SET heartbeat_at = now() WHERE instance_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "709b151913c3fecc95712e97833564ecd70d0b71e45623b8f4cf92da50329b43"
+}

@@ -44,7 +44,19 @@ pub async fn run_once(state: &AppState) -> anyhow::Result<bool> {
 
 async fn run_locked(state: &AppState) -> anyhow::Result<()> {
     delete_stale_unconfirmed(state).await?;
+    prune_catalog_status(state).await?;
     Ok(())
+}
+
+/// `catalog_instance_status` rows whose heartbeat is older than 3 minutes,
+/// left by instances that have stopped.
+pub async fn prune_catalog_status(state: &AppState) -> anyhow::Result<u64> {
+    let r = sqlx::query!(
+        "DELETE FROM catalog_instance_status WHERE heartbeat_at < now() - interval '3 minutes'"
+    )
+    .execute(&state.db)
+    .await?;
+    Ok(r.rows_affected())
 }
 
 /// Accounts never confirmed whose last confirmation code expired more than

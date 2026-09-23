@@ -1,0 +1,40 @@
+[
+  {
+    "kind": "distribution",
+    "name": "english",
+    "file": "english.csv"
+  },
+  {
+    "kind": "distribution",
+    "name": "catalan",
+    "file": "catalan.csv"
+  },
+  {
+    "kind": "lexicon",
+    "name": "EN-FIX",
+    "file": "EN-FIX.tsv",
+    "parent": "english"
+  },
+  {
+    "kind": "lexicon",
+    "name": "EN-FIX-OLD",
+    "file": "EN-FIX-OLD.tsv",
+    "parent": "english"
+  },
+  {
+    "kind": "lexicon",
+    "name": "CA-FIX",
+    "file": "CA-FIX.tsv",
+    "parent": "catalan"
+  },
+  {
+    "kind": "leaves",
+    "name": "EN-FIX",
+    "file": "EN-FIX-leaves.csv"
+  },
+  {
+    "kind": "leaves",
+    "name": "CA-FIX",
+    "file": "CA-FIX-leaves.csv"
+  }
+]

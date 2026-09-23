@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM catalog_instance_status WHERE heartbeat_at < now() - interval '3 minutes'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4dfe2f316bcb1fb97576277dbbac5add8862d2a68a73146e34afe069b99c3504"
+}

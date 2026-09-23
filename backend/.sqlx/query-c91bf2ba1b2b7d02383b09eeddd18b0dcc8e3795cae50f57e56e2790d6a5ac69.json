@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT word, playability, definition FROM lexicon_words WHERE lexicon_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "word",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lexicon_words",
+            "name": "word"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "playability",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "lexicon_words",
+            "name": "playability"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "definition",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lexicon_words",
+            "name": "definition"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c91bf2ba1b2b7d02383b09eeddd18b0dcc8e3795cae50f57e56e2790d6a5ac69"
+}

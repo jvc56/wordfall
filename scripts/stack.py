@@ -336,6 +336,25 @@ def _upload_catalog(http: Http, catalog: Catalog) -> None:
         if status != 201:
             raise RuntimeError(f"upload of {item.kind} {item.name} failed: {status} {body}")
         log(f"uploaded {item.kind} {item.name}")
+    wait_listed(http, catalog)
+
+
+def wait_listed(http: Http, catalog: Catalog, deadline_s: float = 300) -> None:
+    """Waits until every lexicon (and leave set) is loaded by every live
+    instance, which is when `GET /api/lexicons` lists it."""
+    want_lex = {i.name for i in catalog.items if i.kind == "lexicon"}
+    want_leaves = {i.name for i in catalog.items if i.kind == "leaves"}
+    deadline = time.monotonic() + deadline_s
+    while True:
+        status, listed = http.json("GET", "/api/lexicons")
+        if status == 200:
+            names = {x["name"] for x in listed}
+            with_leaves = {x["name"] for x in listed if x.get("leave_count") is not None}
+            if want_lex <= names and want_leaves <= with_leaves:
+                return
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"catalog not loaded everywhere before the deadline: {listed}")
+        time.sleep(0.5)
 
 
 # ---------------------------------------------------------------------------

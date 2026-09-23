@@ -2,6 +2,7 @@
 
 pub mod app;
 pub mod auth;
+pub mod catalog;
 pub mod clock;
 pub mod config;
 pub mod error;

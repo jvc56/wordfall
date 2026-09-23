@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.id, d.name, d.uploaded_at, u.username::text AS \"uploaded_by?\",\n                  (SELECT count(*) FROM letter_distribution_tiles t WHERE t.letter_distribution_id = d.id) AS \"tile_count!\",\n                  (SELECT count(*) FROM lexicons l WHERE l.letter_distribution_id = d.id) AS \"lexicon_count!\"\n           FROM letter_distributions d LEFT JOIN users u ON u.id = d.uploaded_by ORDER BY d.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "letter_distributions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "letter_distributions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "uploaded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "letter_distributions",
+            "name": "uploaded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "uploaded_by?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "tile_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "lexicon_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "46a3862a401d128ede7216476cd2e62bbc42657c0632319ad68f8e65c0f5ae3b"
+}

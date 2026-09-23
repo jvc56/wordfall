@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM lexicons WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a29b89753c3a9c73dcbb1bd994c05b04e7f3bb6743a48e69ff7b7fe1ce07ed88"
+}

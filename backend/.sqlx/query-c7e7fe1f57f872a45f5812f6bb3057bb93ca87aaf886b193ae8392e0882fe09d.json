@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT letter, blank_letter, count, value, is_vowel FROM letter_distribution_tiles\n         WHERE letter_distribution_id = $1 ORDER BY position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "letter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "letter_distribution_tiles",
+            "name": "letter"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blank_letter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "letter_distribution_tiles",
+            "name": "blank_letter"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "count",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "letter_distribution_tiles",
+            "name": "count"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "value",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "letter_distribution_tiles",
+            "name": "value"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "is_vowel",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "letter_distribution_tiles",
+            "name": "is_vowel"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c7e7fe1f57f872a45f5812f6bb3057bb93ca87aaf886b193ae8392e0882fe09d"
+}

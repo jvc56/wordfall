@@ -12,6 +12,7 @@ use tower_http::compression::CompressionLayer;
 
 use crate::auth::mail::{ConsoleMailer, EmailCaps, Mailer};
 use crate::auth::tokens::Keys;
+use crate::catalog::Catalog;
 use crate::clock::Clock;
 use crate::config::{Config, MailBackend};
 use crate::rate::Limiters;
@@ -25,6 +26,7 @@ pub struct AppState {
     pub limits: Arc<Limiters>,
     pub mailer: Arc<dyn Mailer>,
     pub email_caps: Arc<EmailCaps>,
+    pub catalog: Arc<Catalog>,
     /// Set once every catalog item present at startup has been indexed.
     pub catalog_ready: Arc<AtomicBool>,
     /// Argon2 verifies run by login, for the log and the rate-limit tests.
@@ -41,6 +43,7 @@ impl AppState {
             email_caps: Arc::new(EmailCaps::new(clock.clone())),
             clock,
             mailer,
+            catalog: Arc::new(Catalog::default()),
             config: Arc::new(config),
             catalog_ready: Arc::new(AtomicBool::new(false)),
             argon2_verifies: Arc::new(AtomicU64::new(0)),
@@ -57,6 +60,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(crate::health::health))
         .merge(crate::auth::routes::router())
+        .merge(crate::catalog::routes::router(&state))
         .layer(DefaultBodyLimit::max(api_limit))
         .layer(CompressionLayer::new().gzip(true).br(true))
         .with_state(state)
@@ -82,12 +86,19 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
     let mailer = mailer_for(&config)?;
     let state = AppState::new(db, config, mailer);
-    // Nothing to index until the catalog exists.
-    state.catalog_ready.store(true, Ordering::Release);
+    // Bind first so /health can answer "not ready" while the catalog loads.
+    let listener = tokio::net::TcpListener::bind(bind_addr).await?;
+    tracing::info!(%bind_addr, instance_id = %state.catalog.instance_id, "listening");
+    let st = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::catalog::startup(&st).await {
+            tracing::error!(error = %e, "catalog startup load failed");
+            std::process::exit(1);
+        }
+        tracing::info!("catalog loaded; ready");
+    });
     crate::purge::spawn(state.clone());
 
-    let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-    tracing::info!(%bind_addr, "listening");
     axum::serve(
         listener,
         build_router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),

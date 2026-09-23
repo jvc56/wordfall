@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO catalog_instance_status (instance_id, item_kind, item_id)\n             VALUES ($1, $2, $3)\n             ON CONFLICT (instance_id, item_kind, item_id)\n             DO UPDATE SET loaded_at = now(), heartbeat_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "catalog_item_kind",
+            "kind": {
+              "Enum": [
+                "letter_distribution",
+                "lexicon",
+                "leave_set"
+              ]
+            }
+          }
+        },
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1dba7abe8b0d129b59af6ff8dbeebbfcf5a41c48b64d8490d0d5f10cd7b726f1"
+}

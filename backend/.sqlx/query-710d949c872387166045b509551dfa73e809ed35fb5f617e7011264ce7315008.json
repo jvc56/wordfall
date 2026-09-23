@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT leave, value FROM leave_values WHERE leave_set_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "leave",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leave_values",
+            "name": "leave"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "leave_values",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "710d949c872387166045b509551dfa73e809ed35fb5f617e7011264ce7315008"
+}
