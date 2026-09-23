@@ -36,7 +36,8 @@
 		type LexiconInfo,
 		type QuizType
 	} from '$lib/filters';
-	import { deviceId } from '$lib/local/device';
+	import { getMeta } from '$lib/local/meta';
+	import { userDb } from '$lib/local/open';
 	import { DEFAULT_OPTIONS, clampPrefill, type QuizOptions } from '$lib/options';
 	import { PREVIEW_MANUAL_ENTRIES } from '$lib/sync/config';
 	import type { Distribution } from '$lib/tiles';
@@ -126,11 +127,13 @@
 		if (!session.userId) return;
 		createError = null;
 		creating = true;
+		// This device's id for the account, from the per-user `meta` store.
+		const { device_id } = await getMeta(await userDb(session.userId, session.username), 'device');
 		// Minted once per press and reused for every retry of it.
 		const body = {
 			id: crypto.randomUUID(),
 			source_quiz_id: crypto.randomUUID(),
-			device_id: deviceId(session.userId),
+			device_id,
 			at: new Date().toISOString(),
 			name,
 			lexicon,

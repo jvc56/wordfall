@@ -11,6 +11,7 @@
 	import { describe } from '$lib/auth/errors';
 	import { forgetSession, logout, session } from '$lib/auth/session.svelte';
 	import { removeAccountData } from '$lib/local/accounts';
+	import { closeUserDb } from '$lib/local/open';
 
 	let current = $state('');
 	let next = $state('');
@@ -74,6 +75,7 @@
 			return;
 		}
 		// The session is already void: remove this device's copy, with no queued logout.
+		closeUserDb();
 		if (id) await removeAccountData(id);
 		forgetSession();
 		await goto('/', { replaceState: true });

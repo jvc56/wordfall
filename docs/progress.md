@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7a — Local-first player: IndexedDB stores (next to start)
-- **Last green checkpoint:** Phase 6 — Cascade rules and sync
+- **Phase:** 7b — Local-first player: sync engine (next to start)
+- **Last green checkpoint:** Phase 7a — IndexedDB per-user stores
 
 ## Environment notes (this machine)
 
@@ -242,10 +242,32 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   failure, purge vs sync, limits, session renewal, 300k finish/reset).
   `tests/common/sync.rs` asserts every rejection reason is in the fixed list.
 
+### Phase 7a — Per-user stores ✅
+- `lib/local/db.ts` (schema v1: meta, preferences, distributions, base /
+  overlay / staging row stores with cascade/quiz/position indexes, questions,
+  cards, outbox with cascade_id and cursor_quiz indexes; versioned
+  migrations; closes on `versionchange`), `rows.ts` (row types, wire
+  converters), `meta.ts` (identity, device id + next device_seq, sync cursor,
+  server values, opens, keep offline, opt-outs, budget-dropped; `recordOpen`),
+  `view.ts` (overlay-over-base reads), `apply.ts` (`applyOp`, the
+  store-backed twin of `cascade/sim.ts`; `applyLocally` minting device_seq,
+  coalescing move_cursor, recording opens, all in one transaction),
+  `preferences.ts` (defaults + pending ops laid over the base), `open.ts`
+  (one connection per tab; "updated in another tab" notice).
+- Session opens the DB on startup/login, stores `/api/auth/me` values in
+  meta, closes it on logout/removal, calls `navigator.storage.persist()`.
+  The temporary `lib/local/device.ts` is gone; the builder reads the device
+  id from meta.
+- Tests: `lib/local/apply.test.ts` (all 30 rule vectors through
+  `applyLocally` with invariants, two writers, move_cursor coalescing after
+  a finish_segment, rejection writes nothing, opens, seen_seq, a second
+  tab's write during a rebase, fixture DB per earlier version, versionchange,
+  device id, preferences view).
+
 ## Next
 
 Phase 7 — Local-first player, split into sub-milestones, each committed at
-green: **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
+green: (done: 7a) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
 temporary `lib/local/device.ts`), base/overlay/staging/outbox and
 `applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
 paged pull, rebase, notices, resync); **7c** download manager (window,

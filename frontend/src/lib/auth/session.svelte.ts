@@ -11,6 +11,7 @@ import {
 	SIGNED_IN_CHANNEL,
 	type LogoutOutcome
 } from '$lib/local/accounts';
+import { closeUserDb, onUpdatedElsewhere, userDb } from '$lib/local/open';
 import { authApi } from './client';
 import type { Me } from './types';
 
@@ -21,6 +22,8 @@ class Session {
 	isAdmin = $state(false);
 	/** Another tab signed in as someone else: this tab stops syncing and keeps its data. */
 	signedOutInAnotherTab = $state(false);
+	/** A newer build in another tab took the database: "reload to continue". */
+	updatedInAnotherTab = $state(false);
 	/** The server no longer accepts this tab's session: "Log in to sync". */
 	needsLogin = $state(false);
 	me = $state<Me | null>(null);
@@ -49,7 +52,17 @@ function applyMe(me: Me) {
 	session.me = me;
 	session.isAdmin = me.is_admin;
 	session.username = me.username;
+	// The trash retention period and max_quiz_questions as /api/auth/me last reported them.
+	void userDb(me.user_id, me.username)
+		.then((db) =>
+			db.put('meta', { trash_retention_days: me.trash_retention_days, max_quiz_questions: me.max_quiz_questions }, 'server')
+		)
+		.catch(() => undefined);
 }
+
+onUpdatedElsewhere(() => {
+	session.updatedInAnotherTab = true;
+});
 
 let channel: BroadcastChannel | null = null;
 
@@ -60,6 +73,7 @@ export async function initSession() {
 		session.userId = id;
 		session.username = row?.username ?? '';
 		bindUser(id);
+		void userDb(id, session.username).catch(() => undefined);
 	} else {
 		await retryQueuedLogout(sendQueuedLogout);
 	}
@@ -90,8 +104,11 @@ export async function login(username: string, password: string): Promise<Me> {
 	session.userId = me.user_id;
 	session.needsLogin = false;
 	session.signedOutInAnotherTab = false;
+	await userDb(me.user_id, me.username);
 	applyMe(me);
 	bindUser(me.user_id);
+	// PLAN.md § On the device: ask the browser to keep this site's data.
+	void navigator.storage?.persist?.().catch(() => false);
 	return me;
 }
 
@@ -99,6 +116,7 @@ export async function login(username: string, password: string): Promise<Me> {
 export async function logout() {
 	const id = session.userId;
 	if (id) await recordLogout(id);
+	closeUserDb();
 	session.userId = null;
 	session.me = null;
 	session.isAdmin = false;
@@ -109,6 +127,7 @@ export async function logout() {
 
 /** After DELETE /api/account succeeded: the session is already void. */
 export function forgetSession() {
+	closeUserDb();
 	session.userId = null;
 	session.me = null;
 	session.isAdmin = false;
