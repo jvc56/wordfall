@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_condition_words (spec_id, position, entry)\n         SELECT $1, position, entry FROM search_condition_words WHERE spec_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6fdd40d386d687786c0b7575fd261a9ffb5251f6fb04b48b13d7138118ca5c7d"
+}

@@ -1,0 +1,111 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.name, c.spec_id, c.clear_threshold, c.segment_size, c.progression AS \"progression: Progression\",\n                  c.require_alphabetical, l.name AS lexicon\n           FROM cascades c JOIN lexicons l ON l.id = c.lexicon_id WHERE c.id = $1 AND c.user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "spec_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "spec_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "clear_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "clear_threshold"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "segment_size",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "segment_size"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "progression: Progression",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_progression",
+            "kind": {
+              "Enum": [
+                "ladder",
+                "drill"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "progression"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "require_alphabetical",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "require_alphabetical"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lexicon",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lexicons",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f9b19c6b0f78bcb264fcd50a85e9fe403b8553cd5878070d526502f1628b9534"
+}

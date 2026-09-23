@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_groups (spec_id, id, parent_id, op, order_in_group)\n         SELECT $1, * FROM UNNEST($2::int2[], $3::int2[], $4::group_op[], $5::int2[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int2Array",
+        "Int2Array",
+        {
+          "Custom": {
+            "name": "group_op[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "group_op",
+                  "kind": {
+                    "Enum": [
+                      "and",
+                      "or"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Int2Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc259a4499eec7cbc66c28d0dc9062cb2e56e867cf91e309312620f0b2c9dc32"
+}

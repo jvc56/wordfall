@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.name, p.quiz_type AS \"quiz_type: QuizType\",\n                  (SELECT count(*) FROM search_condition_words w WHERE w.spec_id = s.spec_id) AS \"word_list_entries!\",\n                  s.created_at, s.updated_at\n           FROM saved_searches s JOIN search_specs p ON p.id = s.spec_id\n           WHERE s.id = $1 AND s.user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "saved_searches",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "saved_searches",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "quiz_type: QuizType",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_type",
+            "kind": {
+              "Enum": [
+                "anagram",
+                "definition",
+                "leave_value"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "search_specs",
+            "name": "quiz_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "word_list_entries!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "saved_searches",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "saved_searches",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "66bc375ea355b27b412b8a2e6d4c6c1e17856743b9d9723c151c88e555f483a4"
+}

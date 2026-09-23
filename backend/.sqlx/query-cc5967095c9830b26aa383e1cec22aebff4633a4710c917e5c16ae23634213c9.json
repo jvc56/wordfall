@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_conditions (spec_id, position, group_id, order_in_group, condition_type, negated,\n                                        text_value, part_of_speech_value, other_lexicon_id, min_value,\n                                        max_value, min_leave_value, max_leave_value, lax)\n         SELECT $1, position, group_id, order_in_group, condition_type, negated, text_value,\n                part_of_speech_value, other_lexicon_id, min_value, max_value, min_leave_value,\n                max_leave_value, lax\n         FROM search_conditions WHERE spec_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc5967095c9830b26aa383e1cec22aebff4633a4710c917e5c16ae23634213c9"
+}

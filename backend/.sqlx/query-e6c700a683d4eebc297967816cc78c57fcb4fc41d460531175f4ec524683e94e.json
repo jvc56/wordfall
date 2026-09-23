@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_groups (spec_id, id, parent_id, op, order_in_group)\n         SELECT $1, id, parent_id, op, order_in_group FROM search_groups WHERE spec_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6c700a683d4eebc297967816cc78c57fcb4fc41d460531175f4ec524683e94e"
+}

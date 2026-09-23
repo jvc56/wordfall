@@ -1,0 +1,233 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.position, c.group_id, c.order_in_group, c.condition_type AS \"ctype: ConditionType\",\n                  c.negated, c.text_value, c.part_of_speech_value AS \"pos: PartOfSpeech\",\n                  c.other_lexicon_id, l.name AS \"other_lexicon_name?\", c.min_value, c.max_value,\n                  c.min_leave_value, c.max_leave_value, c.lax\n           FROM search_conditions c LEFT JOIN lexicons l ON l.id = c.other_lexicon_id\n           WHERE c.spec_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "group_id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "group_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "order_in_group",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "order_in_group"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ctype: ConditionType",
+        "type_info": {
+          "Custom": {
+            "name": "condition_type",
+            "kind": {
+              "Enum": [
+                "anagram_match",
+                "pattern_match",
+                "subanagram_match",
+                "length",
+                "in_lexicon",
+                "in_word_list",
+                "num_vowels",
+                "includes_letters",
+                "probability_order",
+                "limit_by_probability_order",
+                "playability_order",
+                "limit_by_playability_order",
+                "num_unique_letters",
+                "point_value",
+                "takes_prefix",
+                "takes_suffix",
+                "part_of_speech",
+                "definition",
+                "consists_of",
+                "num_anagrams",
+                "front_inner_hook",
+                "back_inner_hook",
+                "leave_value"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "condition_type"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "negated",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "negated"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "text_value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "text_value"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "pos: PartOfSpeech",
+        "type_info": {
+          "Custom": {
+            "name": "part_of_speech",
+            "kind": {
+              "Enum": [
+                "adjective",
+                "adverb",
+                "conjunction",
+                "definite_article",
+                "indefinite_article",
+                "interjection",
+                "noun",
+                "preposition",
+                "pronoun",
+                "verb"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "part_of_speech_value"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "other_lexicon_id",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "other_lexicon_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "other_lexicon_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "lexicons",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "min_value",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "min_value"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "max_value",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "max_value"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "min_leave_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "min_leave_value"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "max_leave_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "max_leave_value"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "lax",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "search_conditions",
+            "name": "lax"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "458825a0ac406fc0d50ec012a6c146aa42fb9f206cce311d2e9a2d8ba4c7d49a"
+}

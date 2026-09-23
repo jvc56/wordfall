@@ -3,9 +3,13 @@
 //! `wire` is the filter tree as sent; `validate` checks it against a quiz type
 //! and target and parses it into the engine's `SearchSpec`; `engine` runs it.
 
+#[cfg(test)]
+mod contract;
 pub mod engine;
 pub mod pattern;
 pub mod routes;
+pub mod saved;
+pub mod store;
 #[cfg(test)]
 mod tests;
 pub mod validate;

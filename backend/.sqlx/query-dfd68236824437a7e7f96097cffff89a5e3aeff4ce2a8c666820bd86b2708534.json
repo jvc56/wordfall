@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT quiz_type AS \"quiz_type: QuizType\" FROM search_specs WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "quiz_type: QuizType",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_type",
+            "kind": {
+              "Enum": [
+                "anagram",
+                "definition",
+                "leave_value"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "search_specs",
+            "name": "quiz_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dfd68236824437a7e7f96097cffff89a5e3aeff4ce2a8c666820bd86b2708534"
+}

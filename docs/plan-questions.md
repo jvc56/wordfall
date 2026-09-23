@@ -89,3 +89,28 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   distribution or lexicon, lexicon already has leave values, missing file,
   empty file, body too large) have no line.
 - **Provisional choice:** the same `400` shape with `line: null`.
+
+## PQ-008 — The shape of an Anagram card's `answer` (open)
+
+- **Plan:** API → Cascades and sync (card pages): cards are
+  `[{ idx, key, answer }]`; a Leave Value answer is a JSON number; Answers
+  (674–703) describes what is shown, not the JSON.
+- **Provisional choice:** Definition → the definition string; Leave Value →
+  the number (shortest round-trip text); Anagram → an array, in alphabetical
+  order, of `{ word, front_hooks?, back_hooks?, definition? }`, words and hook
+  lists in MAGPIE notation (hooks already in tile order, `""` when none),
+  `front_hooks`/`back_hooks` present only with `hooks=1` and `definition` only
+  with `definitions=1`. Creation's `sync_seq` is decimal text like every other
+  sequence on the wire. (`backend/src/cascade/routes.rs`)
+
+## PQ-009 — In Word List entry order (open)
+
+- **Plan:** Integration tests (5582–5585): a saved tree with a 10,000-entry
+  In Word List read back "equal to what was sent, child order included";
+  Schema: `search_condition_words` has `PRIMARY KEY (spec_id, position,
+  entry)` and no ordering column.
+- **Issue:** Entry order and duplicates cannot survive the schema.
+- **Provisional choice:** entries are a set: stored deduplicated and read back
+  sorted by byte order (`COLLATE "C"`). The builder's WordListEditor sends
+  them sorted and deduplicated, so a round trip is exact.
+  (`backend/src/search/store.rs`)

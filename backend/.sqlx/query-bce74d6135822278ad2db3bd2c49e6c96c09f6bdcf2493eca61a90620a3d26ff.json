@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_condition_words (spec_id, position, entry)\n             SELECT $1, * FROM UNNEST($2::int2[], $3::text[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int2Array",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bce74d6135822278ad2db3bd2c49e6c96c09f6bdcf2493eca61a90620a3d26ff"
+}

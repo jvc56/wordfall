@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO cascade_questions (cascade_id, idx, question_key)\n         SELECT $1, * FROM UNNEST($2::int4[], $3::text[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4Array",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9174afa39a77db2bb1cdf3eb3fae779a05463dba10d01a16092be1a0c32564fa"
+}

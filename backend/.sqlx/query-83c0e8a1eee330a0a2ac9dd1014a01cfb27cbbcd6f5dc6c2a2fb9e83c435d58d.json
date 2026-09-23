@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO quizzes (id, cascade_id, user_id, level, origin, segment_size, progression,\n                              require_alphabetical, options_changed_at, options_seq, options_device_id,\n                              shuffle_seed, questions_hash, question_count, created_seq, updated_seq)\n         VALUES ($1, $2, $3, 1, 'source', $4, $5, $6, $7, $8, $9, $10, $11, $12, $8, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        {
+          "Custom": {
+            "name": "quiz_progression",
+            "kind": {
+              "Enum": [
+                "ladder",
+                "drill"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Timestamptz",
+        "Int8",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "83c0e8a1eee330a0a2ac9dd1014a01cfb27cbbcd6f5dc6c2a2fb9e83c435d58d"
+}

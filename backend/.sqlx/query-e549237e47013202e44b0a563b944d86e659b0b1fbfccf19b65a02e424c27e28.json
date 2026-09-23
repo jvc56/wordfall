@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO search_conditions\n               (spec_id, position, group_id, order_in_group, condition_type, negated, text_value,\n                part_of_speech_value, other_lexicon_id, min_value, max_value, min_leave_value,\n                max_leave_value, lax)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int2",
+        "Int2",
+        "Int2",
+        {
+          "Custom": {
+            "name": "condition_type",
+            "kind": {
+              "Enum": [
+                "anagram_match",
+                "pattern_match",
+                "subanagram_match",
+                "length",
+                "in_lexicon",
+                "in_word_list",
+                "num_vowels",
+                "includes_letters",
+                "probability_order",
+                "limit_by_probability_order",
+                "playability_order",
+                "limit_by_playability_order",
+                "num_unique_letters",
+                "point_value",
+                "takes_prefix",
+                "takes_suffix",
+                "part_of_speech",
+                "definition",
+                "consists_of",
+                "num_anagrams",
+                "front_inner_hook",
+                "back_inner_hook",
+                "leave_value"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Text",
+        {
+          "Custom": {
+            "name": "part_of_speech",
+            "kind": {
+              "Enum": [
+                "adjective",
+                "adverb",
+                "conjunction",
+                "definite_article",
+                "indefinite_article",
+                "interjection",
+                "noun",
+                "preposition",
+                "pronoun",
+                "verb"
+              ]
+            }
+          }
+        },
+        "Int2",
+        "Int4",
+        "Int4",
+        "Float8",
+        "Float8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e549237e47013202e44b0a563b944d86e659b0b1fbfccf19b65a02e424c27e28"
+}

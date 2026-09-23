@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM saved_searches WHERE id = $1 AND user_id = $2 RETURNING spec_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "spec_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "saved_searches",
+            "name": "spec_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c0669fe4d45b878d550bd3b33d98a38487a3dff7ebba58519cfe1835139b7668"
+}
