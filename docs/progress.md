@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 5 — Cascade builder (next to start)
-- **Last green checkpoint:** Phase 4 — Search engine
+- **Phase:** 6 — Cascade rules and sync (next to start)
+- **Last green checkpoint:** Phase 5 — Cascade builder
 
 ## Environment notes (this machine)
 
@@ -174,20 +174,63 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   read keys, compare with `zyzzyva/<name>.txt`, print index sizes/times and
   search times). Uses Phase 5 endpoints.
 
+### Phase 5 — Cascade builder ✅
+- Contract: `contract-fixtures/tools/gen_filters.py` reads PLAN.md's parameter,
+  reference and applicability tables → `contract-fixtures/filters/conditions.json`
+  (types, fields, negatable, limit, applies_to, labels, one valid condition
+  per type with exact text, one extra-field condition). Checked by
+  `backend/src/search/contract.rs` and `frontend/src/lib/filters.test.ts`.
+- Backend: `search/store.rs` (spec ↔ rows: groups DFS-numbered, typed
+  columns, entries deduped/sorted C collation (PQ-009), In Lexicon id for
+  cascades / name for saved searches, `copy_spec`), `search/saved.rs`
+  (GET list without trees + entry counts, GET one (search bucket), POST with
+  id idempotency, save-mode validation, name_taken/overwrite, limit under the
+  user-row lock, DELETE with spec), `cascade/order.rs` (SplitMix64,
+  Fisher–Yates, reset XOR, FNV-1a questions_hash, i64 storage),
+  `cascade/rows.rs` (CascadeRow/QuizRow wire form: u64 as unsigned decimal
+  text, seqs as decimal text), `cascade/routes.rs` (POST /api/cascades:
+  idempotent by device ids, 409 invalid for other users' ids, cheap limit
+  check → search outside any tx → tx locking user row, re-check, seq bump,
+  spec, cascade, UNNEST questions, Source quiz shuffle; start-over copying
+  spec/threshold/options; cards with keys=1, no-store, download bucket;
+  anagram answer shape PQ-008; `clamp_at` for device times ≤ now+5min).
+- Tests: `tests/schema.rs` (6), `tests/saved_searches.rs` (7),
+  `tests/cascades.rs` (13).
+- Frontend: `lib/tiles.ts` (+tests), `lib/filters.ts` (table, ceilings,
+  rangeError, wire parse/serialise, summary name, cutName) (+tests),
+  `lib/options.ts`, `lib/sync/config.ts` (client constants, PQ-010),
+  `lib/builder/preview.ts` (debounce/interval/reserve/busy/one retry)
+  (+tests), `lib/builder/create.ts` (`sendWithRetry` with busy state)
+  (+test), `lib/builder/form.ts` (row/group state, flags on type/lexicon
+  change and load, toWire with client errors, saveBlocker, entries)
+  (+tests), `lib/builder/tree-ops.ts`, `lib/catalog.ts`, components
+  `TileText`, `builder/TilePalette`, `builder/WordListEditor`,
+  `builder/FilterRow`, `builder/FilterGroup` (recursive, drag-and-drop),
+  `QuizOptionsForm`; page `/cascades/new` (type, lexicon, tree, load/save
+  dialogs, preview, threshold, options, auto name, create with retry);
+  placeholder `/cascades/[id]`.
+- TEMPORARY until Phase 7a: `lib/local/device.ts` keeps the device id in
+  localStorage (must move into the per-user `meta` store); builder defaults
+  use documented defaults instead of the preferences store; the cascade count
+  for the limit warning is not shown yet (needs local cascades store).
+- e2e: `tests/builder.spec.ts` (log in, preview 18, name, create).
+
 ## Next
 
-Phase 5 — Cascade builder. Re-read: UX → Creating a cascade (463–550), Quiz
-options (178–237), Cascade limit (405–427), Filter applicability (1509–1566),
-Cascades → Questions stored once (1819–1829), Deterministic shuffles
-(1830–1867) (Source quiz seed/shuffle on creation), Working at 300,000
-(1924–1964), API → Catalog and search (4101–4165: saved searches) and
-Cascades and sync (4166–4253: POST /api/cascades, start-over, cards incl.
-keys=1), Frontend (4271–4415: FilterGroup, FilterRow, TilePalette, TileText,
-QuizOptionsForm, WordListEditor), Schema filter specs + cascades, Testing →
-Contract fixtures (4875–4882 filter contract), Integration tests: schema
-round-trip tests, saved-search tests, cascade creation tests, card page tests.
-Write `contract-fixtures/filters/` from the parameter table with an
-independent generator in `contract-fixtures/tools/` FIRST.
+Phase 6 — Cascade rules and sync. Re-read in full: Cascade Rules (78–427),
+Cascades (1817–1964), Offline and Sync → Operations (2365–2475), The sync
+cycle (2476–2797), Conflicts (2798–2884), Schema cascades/quizzes/sync
+(3434–3826) + Purge task (3827–3870), API → Cascades and sync (4166–4253:
+sync body/response, questions and grades endpoints), Testing → Contract
+fixtures (4782–4883), frontend unit list (5000+ for lib/cascade), integration
+sync tests (5334–5565). Order: (1) contract fixtures FIRST with independent
+reference scripts under `contract-fixtures/tools/` (shuffle vectors, question
+hashes incl. >2^63, leave value text, rule vectors); (2) Rust
+`backend/src/cascade/rules.rs` + TS `frontend/src/lib/cascade/` passing them;
+(3) `/api/sync` (push with savepoints, transient vs `error`, acked_below,
+paged pull with ceiling in page token, tombstones, resync_required, 426),
+questions + grades endpoints, sliding session renewal on sync (PQ-003); (4)
+purge task (per-user cap, trashed cascades whole, sync record pruning).
 
 ## Open PQs
 
@@ -198,6 +241,9 @@ independent generator in `contract-fixtures/tools/` FIRST.
 - PQ-005 (/api/lexicons "startup load" test wording) — provisional.
 - PQ-006 (≤256 tiles per distribution for u8 indexes) — provisional.
 - PQ-007 (upload form errors use `line: null`) — provisional.
+- PQ-008 (anagram card answer shape; creation sync_seq as text) — provisional.
+- PQ-009 (In Word List entries are a set, returned in byte order) — provisional.
+- PQ-010 (client SEARCH_RATE constant; structural invalid-entry count) — provisional.
 
 ## Known failing tests
 

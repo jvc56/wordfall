@@ -114,3 +114,19 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   sorted by byte order (`COLLATE "C"`). The builder's WordListEditor sends
   them sorted and deduplicated, so a round trip is exact.
   (`backend/src/search/store.rs`)
+
+## PQ-010 — What the builder knows client-side (open)
+
+- **Plan:** Creating a cascade (step 8) has the preview keep a reserve of "all
+  but two of `SEARCH_RATE_PER_MINUTE`"; Frontend → WordListEditor shows "how
+  many entries are not valid in the lexicon".
+- **Issue:** `SEARCH_RATE_PER_MINUTE` is server configuration the client is
+  never told (`/api/auth/me` reports only the retention period and the question
+  cap), and lexicon membership needs the server's word list.
+- **Provisional choices:** the reserve is measured against the default, 30, a
+  constant in `lib/sync/config.ts`; the editor's "not valid" count is
+  structural — entries that do not parse in the distribution for the quiz
+  type, have the wrong tile count, exceed the bag (leaves) or are not in
+  canonical order — which is also what the plan's type-change recount test
+  describes. Words that parse but are not in the lexicon are ignored by the
+  server's search as the plan says.
