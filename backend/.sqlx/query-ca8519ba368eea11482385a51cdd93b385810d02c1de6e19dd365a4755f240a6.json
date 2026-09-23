@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM users u\n         WHERE u.email_confirmed_at IS NULL\n           AND NOT EXISTS (SELECT 1 FROM email_confirmations c\n                           WHERE c.user_id = u.id\n                             AND c.expires_at > now() - interval '7 days')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ca8519ba368eea11482385a51cdd93b385810d02c1de6e19dd365a4755f240a6"
+}

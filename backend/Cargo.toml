@@ -5,10 +5,20 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.104"
+argon2 = "0.6.0"
 axum = "0.8.9"
+axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
+base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }
+cookie = { version = "0.18.2", features = ["percent-encode"] }
+governor = "0.10.4"
+hex = "0.4.3"
+hkdf = "0.13.0"
+pasetors = "0.8.1"
+rand = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.11.0"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "migrate", "macros", "tls-none"] }
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
@@ -17,7 +27,14 @@ tower-http = { version = "0.7.1", features = ["compression-gzip", "compression-b
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["json", "env-filter"] }
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
+zxcvbn = "3.1.1"
 
 [dev-dependencies]
 bytes = "1.12.1"
 http-body-util = "0.1.5"
+
+# Argon2 is slow unoptimised; tests hash on every registration and login.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3

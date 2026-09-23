@@ -1,4 +1,23 @@
-<main class="mx-auto max-w-2xl p-8">
-	<h1 class="text-3xl font-semibold">Wordfall</h1>
-	<p class="mt-2 text-zinc-400">Word study for crossword game players.</p>
-</main>
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { Button } from '$lib/components/ui/button';
+	import { session } from '$lib/auth/session.svelte';
+
+	$effect(() => {
+		if (session.userId) goto('/cascades', { replaceState: true });
+	});
+</script>
+
+{#if !session.userId}
+	<main class="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 p-8">
+		<h1 class="text-4xl font-semibold tracking-tight">Wordfall</h1>
+		<p class="text-lg text-muted-foreground">
+			Word study for crossword game players. Describe the words you want with filters, and
+			study them as a cascade of flashcard quizzes — online or off.
+		</p>
+		<div class="flex gap-3">
+			<Button href="/register">Create an account</Button>
+			<Button href="/login" variant="outline">Log in</Button>
+		</div>
+	</main>
+{/if}

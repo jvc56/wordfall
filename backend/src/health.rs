@@ -1,10 +1,10 @@
 //! `GET /health` checks the database connection and that every catalog item
 //! present at startup is indexed (PLAN.md § API → Admin).
 
+use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use axum::Json;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::app::AppState;
 

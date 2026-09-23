@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM users u\n         WHERE (u.username = $1 OR u.email = $2)\n           AND u.email_confirmed_at IS NULL\n           AND NOT EXISTS (SELECT 1 FROM email_confirmations c\n                           WHERE c.user_id = u.id AND c.expires_at > now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ad3e9b2bfd69f9c0ce980eb04906c2eb824b15776bac7d73f5f96511c1c5344"
+}

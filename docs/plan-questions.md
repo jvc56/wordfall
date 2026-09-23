@@ -14,3 +14,48 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   custom variant; (b) Tailwind v3 + the legacy shadcn-svelte 0.x line.
 - **Provisional choice:** (a). Behaviour is identical (class-based dark mode,
   `class="dark"` always on `<html>`). Marked in `frontend/src/app.css`.
+
+## PQ-002 — Auth wire details the plan leaves unnamed (open)
+
+- **Plan:** Authentication (3871–4056), API → Auth and account (4084–4100).
+- **Issue:** The plan names the session cookie (`wordfall_session`) and the
+  endpoints but not: the CSRF cookie and header names; the shape of the
+  register `400` ("every field error at once"); the success statuses and
+  bodies of register, confirm, reset and the account endpoints; the request
+  field names of confirm, reset-confirm, change password and delete; the
+  password length bounds ("strength with zxcvbn (score ≥ 3) and length").
+- **Provisional choices:** CSRF cookie `wordfall_csrf`, header
+  `X-CSRF-Token`; field errors `400 { errors: [{ field, message }] }` (the
+  search endpoints' `{ path, field, message }` minus `path`); register and
+  reset-password `202 {}`; confirm, reset-confirm, sign-out-everywhere,
+  password and delete `204`; login `200` with the `/api/auth/me` body;
+  bodies `{ code }`, `{ email }`, `{ token, password }`,
+  `{ current_password, new_password }`, `{ password }`; passwords 8–128
+  characters. Wrong credentials `401 { error: "unauthorized" }`, unconfirmed
+  `403 { error: "email_unconfirmed" }`, bad code/token
+  `400 { error: "invalid_code" | "invalid_token" }`.
+- Marked in `backend/src/auth/session.rs`, `backend/src/auth/password.rs`,
+  `backend/src/error.rs`, `frontend/src/lib/api.ts`.
+
+## PQ-003 — Which responses slide the session TTL (open)
+
+- **Plan:** Authentication (3946–3949): "a sync made in the last seven days of
+  a cookie's life is answered with a fresh cookie of the full TTL".
+- **Issue:** Only sync is named; `GET /api/auth/me` "re-sets" the CSRF cookie
+  but is not said to renew the session.
+- **Options:** (a) renew on sync only; (b) renew on every authenticated request.
+- **Provisional choice:** (a), literal. `session::renewal` is applied by the
+  sync handler (Phase 6); its integration test lands with the sync endpoint.
+
+## PQ-004 — `governor` cannot express the login-failure buckets (open)
+
+- **Plan:** Tech Stack names `governor`; Authentication → Login requires a
+  request refused "before any Argon2 verify runs when either bucket is empty",
+  with "a token taken from both only when the verify fails" and "a successful
+  login spends nothing".
+- **Issue:** `governor` only offers check-and-take; it cannot peek at a bucket
+  without spending it, nor refund.
+- **Provisional choice:** every other limit uses `governor`; the two
+  login-failure limits use a small in-house bucket with the same quota
+  semantics (`n` per minute, burst `n`) that can be inspected before it is
+  spent (`backend/src/rate.rs`, `FailureBuckets`).

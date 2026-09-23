@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET session_generation = session_generation + 1 WHERE id = $1\n         RETURNING session_generation",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_generation",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "session_generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c1c88186e9012cbd4657de0d8ac202223272dc94601bb4cc4fa31770f92ae12d"
+}

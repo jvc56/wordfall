@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 2 — Accounts (next to start)
-- **Last green checkpoint:** Phase 1 — Skeleton
+- **Phase:** 3 — Catalog (next to start)
+- **Last green checkpoint:** Phase 2 — Accounts
 
 ## Environment notes (this machine)
 
@@ -68,18 +68,64 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   integration targets green; shell e2e spec passed against the running stack.
   `make test-e2e` end-to-end needs seeding (registration) — Phase 2.
 
+### Phase 2 — Accounts ✅
+- Backend: `auth/` (tokens: PASETO v4.local session + HKDF export key;
+  password: Argon2 + zxcvbn≥3, 8–128 chars; mail: console/recording mailers,
+  in-memory 24h caps 3/IP/address and 20/address; session: `Session`
+  (binding + CSRF), `UnboundSession` (/me), `Admin` (404 for non-admins),
+  `renewal()` for the sliding TTL; routes: every Auth and account endpoint).
+  `rate.rs`: governor keyed limiters for every named bucket + `FailureBuckets`
+  (PQ-004). `net.rs` client IP by `TRUSTED_PROXY_HOPS`. `clock.rs` (test
+  offset). `extract.rs` `ApiJson` (415 on wrong content type). `purge.rs`
+  skeleton (advisory lock; deletes stale unconfirmed accounts only so far).
+- Emails are queued after the response (spawned), so register/reset branches
+  time alike. Registration takes sync seq 1 and stamps prefs; 6 default
+  bindings.
+- `backend/tests/auth.rs`: 25 integration tests (register branches, email
+  caps, replacement under cap, timing, confirm, cookies/TTL, /me CSRF re-set,
+  logout rules, 415, account binding, sign out everywhere, change password,
+  delete, expiry, reset flow, login-failure limits before Argon2, per-IP auth
+  bucket, purge of stale unconfirmed).
+- Frontend: shadcn-svelte (vega style, zinc/neutral) + components in
+  `src/lib/components/ui`; `lib/api.ts` (CSRF, X-Wordfall-User, withRetry);
+  `lib/local/accounts.ts` = the **unscoped IndexedDB database** (accounts
+  table + signed_in pointer, queued logout rules) with 14 Vitest cases;
+  `lib/auth/session.svelte.ts` (startup reads pointer, /me comparison,
+  BroadcastChannel, login/logout); pages `/`, `/login`, `/register`,
+  `/register/check-email`, `/confirm-email`, `/reset-password`,
+  `/reset-password/confirm`, minimal `/account` (logout + remove data,
+  change password, sign out everywhere, delete), placeholder `/cascades`.
+- `make test-e2e` is green end to end (seed registers `dev` through the real
+  endpoints, code read from the console mail log).
+- Deferred to later phases (tracked): sliding-TTL integration test (needs
+  sync, Phase 6); account-binding tests for sync/cards/cascade creation/export
+  token (their phases); admin-authorization test (Phase 3, first admin route).
+- Terraform: service capped at two tasks.
+
 ## Next
 
-Phase 2 — Accounts. Re-read: UX → Accounts/Preferences (430–462),
-Authentication (3871–4056), Authentication while offline (2885–2995), API
-preamble + Auth and account (4057–4100), Schema accounts (3103–3192),
-Configuration, Integration tests (5299–5664) auth parts, Frontend auth routes.
-Then fix `stack.seed` to the real contracts and make `make test-e2e` green.
+Phase 3 — Catalog. Re-read: Admin (1031–1222), Tiles (1223–1286),
+Probability (1489–1508), Catalog Indexes (1642–1700), Schema catalog
+(3193–3268), API → Catalog and search (4101–4165) and Admin (4254–4270),
+Testing → fixture catalog (4765–4781), backend unit tests (4888–4999),
+integration tests admin parts. Build the fixture catalog FIRST
+(`fixtures/catalog/` + `manifest.json` read by `stack.fixture_catalog()`:
+entries `{kind: distribution|lexicon|leaves, name, file, parent}`).
+Then: upload validators (line-numbered errors capped at 1,000 + total),
+greedy tile parsing (no backtracking), LexiconIndex/LeaveSetIndex with
+every derived attribute, LISTEN/NOTIFY reconcile, `catalog_instance_status`,
+`/health` readiness from real loading, `GET /api/lexicons`,
+`GET /api/letter-distributions/:name`, `/api/admin/*`, `/admin` pages. Check
+`stack.seed`'s `/api/admin/catalog` key assumptions
+(`letter_distributions[].name`, `lexicons[].name`, `leave_sets[].lexicon`).
 
 ## Open PQs
 
 - PQ-001 (Tailwind v4 dark variant) — provisional, non-blocking.
+- PQ-002 (auth wire names/shapes) — provisional, non-blocking.
+- PQ-003 (sliding TTL on sync only) — provisional, non-blocking.
+- PQ-004 (governor can't peek; custom login-failure buckets) — provisional.
 
 ## Known failing tests
 
-- None. (`make test-e2e` cannot seed until Phase 2 registration exists.)
+- None.

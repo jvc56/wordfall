@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n            SELECT 1 FROM users u\n            WHERE u.username = $1\n              AND (u.email_confirmed_at IS NOT NULL\n                   OR EXISTS (SELECT 1 FROM email_confirmations c\n                              WHERE c.user_id = u.id AND c.expires_at > now()))\n         ) AS \"taken!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        }
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "778873f0971d1535cd5e9b74ea2a7fcaaccf7eef1f1bd1c4e696b0b92e7db5a9"
+}

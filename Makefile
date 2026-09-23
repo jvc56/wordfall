@@ -43,7 +43,9 @@ test-integration:
 	  sleep 0.5
 	done
 	cd backend
-	DATABASE_URL=postgres://postgres:wordfall@127.0.0.1:$$port/postgres cargo test --test '*'
+	export TEST_DATABASE_URL=postgres://postgres:wordfall@127.0.0.1:$$port/postgres
+	# #[sqlx::test] reads DATABASE_URL; each test gets its own database.
+	DATABASE_URL=$$TEST_DATABASE_URL cargo test --test '*'
 
 ## stack.up, stack.seed, Playwright, stack.down.
 test-e2e: frontend-deps

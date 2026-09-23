@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_input_bindings (user_id, action, slot, kind, code) VALUES\n            ($1, 'show_next',    0, 'mouse_button', 'left'),\n            ($1, 'show_next',    1, 'key',          'Space'),\n            ($1, 'toggle_grade', 0, 'mouse_button', 'right'),\n            ($1, 'toggle_grade', 1, 'key',          'KeyX'),\n            ($1, 'previous',     0, 'mouse_button', 'middle'),\n            ($1, 'previous',     1, 'key',          'Backspace')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81bd5a5adbd3f6ec03bddbbe60e102d5b441670a55122cc30d4d681676e21b9e"
+}

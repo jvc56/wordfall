@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO email_confirmations (user_id, code_hash, expires_at)\n         VALUES ($1, $2, now() + interval '24 hours')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fe9ac8baf9ee393d21a30f3e85dde19e20f3f77db567ff924e898b3c9c2c9ada"
+}

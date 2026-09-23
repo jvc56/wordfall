@@ -51,8 +51,13 @@ variable "search_concurrency" {
 }
 
 variable "desired_count" {
-  type    = number
-  default = 2
+  description = "Rate-limit buckets are in memory per task, so the task count multiplies every limit; capped at two until a shared limiter exists (PLAN.md § Authentication)."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.desired_count >= 1 && var.desired_count <= 2
+    error_message = "The service is capped at two tasks."
+  }
 }
 
 variable "db_instance_class" {

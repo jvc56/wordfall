@@ -71,7 +71,7 @@ impl Config {
             other => {
                 return Err(ConfigError(format!(
                     "MAIL_BACKEND must be console or ses, not {other:?}"
-                )))
+                )));
             }
         };
         let max_quiz_questions: u32 = r.parse("MAX_QUIZ_QUESTIONS", QUESTION_CEILING)?;

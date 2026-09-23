@@ -74,14 +74,15 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "app" {
-  name                               = "wordfall"
-  cluster                            = aws_ecs_cluster.main.id
-  task_definition                    = aws_ecs_task_definition.app.arn
-  desired_count                      = var.desired_count
-  launch_type                        = "FARGATE"
-  health_check_grace_period_seconds  = 300
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
+  name                              = "wordfall"
+  cluster                           = aws_ecs_cluster.main.id
+  task_definition                   = aws_ecs_task_definition.app.arn
+  desired_count                     = var.desired_count
+  launch_type                       = "FARGATE"
+  health_check_grace_period_seconds = 300
+  # A rolling deploy may briefly run a third task; its limits are per task too.
+  deployment_minimum_healthy_percent = 50
+  deployment_maximum_percent         = 100
 
   network_configuration {
     subnets          = aws_subnet.private[*].id
