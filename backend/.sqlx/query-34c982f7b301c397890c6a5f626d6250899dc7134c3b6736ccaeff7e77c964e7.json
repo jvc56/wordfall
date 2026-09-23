@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO quiz_questions (quiz_id, question_idx, position, updated_seq)\n         SELECT $1, u.idx, u.pos, $4 FROM UNNEST($2::int4[], $3::int4[]) AS u(idx, pos)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4Array",
+        "Int4Array",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "34c982f7b301c397890c6a5f626d6250899dc7134c3b6736ccaeff7e77c964e7"
+}

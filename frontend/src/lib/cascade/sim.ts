@@ -189,8 +189,9 @@ export class SimCascade {
 			}
 			case 'finish': {
 				const q = this.live(op.quiz);
-				checkDeepest(this.state, q.state);
+				// PQ-013: the attempt before the depth.
 				checkAttempt(q.state, op.attempt, op.attempt_seed);
+				checkDeepest(this.state, q.state);
 				if (q.grades.size !== q.state.question_count) throw new Rejected('ungraded');
 				this.idFree(op.new_quiz_id);
 				const misses = q.questions.filter((i) => q.grades.get(i) === 'missed');
@@ -221,7 +222,7 @@ export class SimCascade {
 			}
 			case 'finish_segment': {
 				const q = this.live(op.quiz);
-				checkDeepest(this.state, q.state);
+				// PQ-013: the attempt and the duplicate before the depth.
 				checkAttempt(q.state, op.attempt, op.attempt_seed);
 				checkSegmentEnd(q.state, op.segment_end);
 				for (const o of this.quizzes.values()) {
@@ -233,6 +234,7 @@ export class SimCascade {
 					)
 						throw new Rejected('duplicate_segment');
 				}
+				checkDeepest(this.state, q.state);
 				checkSegmentPastCursor(q.state, op.segment_end);
 				const pos = positionsOf(q);
 				for (let p = 0; p < op.segment_end; p++) if (!q.grades.has(pos[p])) throw new Rejected('ungraded');

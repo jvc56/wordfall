@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET origin_quiz_id = NULL WHERE cascade_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a22a92b789191cc9aac3162246d6a9859d7f45c958a758d9014f6b55f759ee8e"
+}

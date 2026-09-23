@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT attempt, shuffle_seed FROM quizzes WHERE id = $1 AND cascade_id = $2 AND user_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "shuffle_seed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "shuffle_seed"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3ae520537d59bd66b2295ccda49fd58ecf9502fdbfed92fcd969998d47f1c172"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET attempt = $2, shuffle_seed = $3, correct_count = 0, missed_count = 0, cursor = 0,\n                            cursor_moved_at = $4, cursor_device_id = $5, run_start = 0, updated_seq = $6\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int8",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eccc689e1e4179cd5cd22e3c890b4124ab74bc8259c2203aa32e73562b66376a"
+}

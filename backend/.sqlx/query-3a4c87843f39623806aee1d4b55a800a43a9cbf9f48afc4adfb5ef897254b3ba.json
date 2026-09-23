@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET cursor = $2, run_start = $2, cursor_moved_at = $3, cursor_device_id = $4,\n                            last_activity_at = greatest(last_activity_at, $3), updated_seq = $5 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a4c87843f39623806aee1d4b55a800a43a9cbf9f48afc4adfb5ef897254b3ba"
+}

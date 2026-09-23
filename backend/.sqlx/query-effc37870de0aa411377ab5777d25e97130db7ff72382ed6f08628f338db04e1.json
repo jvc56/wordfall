@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sync_devices (user_id, device_id, acked_below) VALUES ($1, $2, $3)\n             ON CONFLICT (user_id, device_id) DO UPDATE SET acked_below = greatest(sync_devices.acked_below, EXCLUDED.acked_below)\n             RETURNING acked_below",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "acked_below",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sync_devices",
+            "name": "acked_below"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "effc37870de0aa411377ab5777d25e97130db7ff72382ed6f08628f338db04e1"
+}

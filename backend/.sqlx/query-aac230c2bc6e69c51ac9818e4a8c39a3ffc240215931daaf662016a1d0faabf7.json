@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH gone AS (DELETE FROM sync_tombstones WHERE user_id = $1 AND deleted_at < now() - make_interval(days => $2)\n                           RETURNING seq)\n             SELECT max(seq) FROM gone",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "aac230c2bc6e69c51ac9818e4a8c39a3ffc240215931daaf662016a1d0faabf7"
+}

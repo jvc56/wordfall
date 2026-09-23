@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT question_idx FROM quiz_questions WHERE quiz_id = $1 ORDER BY question_idx OFFSET $2 LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_idx",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "question_idx"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1324f19b2921db2ed5f40067fcd7b25a2a783c3e107d9c02d72d2c9243b74073"
+}

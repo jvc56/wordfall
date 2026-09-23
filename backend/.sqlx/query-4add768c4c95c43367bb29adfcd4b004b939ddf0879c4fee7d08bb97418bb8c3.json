@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT acked_below FROM sync_devices WHERE user_id = $1 AND device_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "acked_below",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sync_devices",
+            "name": "acked_below"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4add768c4c95c43367bb29adfcd4b004b939ddf0879c4fee7d08bb97418bb8c3"
+}

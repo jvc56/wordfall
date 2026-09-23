@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT grade AS \"grade: Grade\", graded_at, graded_by_device_id, updated_seq\n           FROM quiz_questions WHERE quiz_id = $1 AND question_idx = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grade: Grade",
+        "type_info": {
+          "Custom": {
+            "name": "grade",
+            "kind": {
+              "Enum": [
+                "correct",
+                "missed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "grade"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "graded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "graded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "graded_by_device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "graded_by_device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "updated_seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0e1d25133750afb9d9ce3d9d10a7131c267e055142d727f86b548981b04a0177"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE cascades SET trashed_at = NULL, last_activity_at = greatest(last_activity_at, $2), updated_seq = $3\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a66775ca7198016eb4da6fabea2f1f5730aa9ef2781e42460b02d7054716f490"
+}

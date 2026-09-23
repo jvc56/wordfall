@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT q.id FROM quizzes q JOIN cascades c ON c.id = q.cascade_id\n             WHERE q.user_id = $1 AND q.status = 'cleared' AND c.trashed_at IS NULL\n               AND q.cleared_at < now() - make_interval(days => $2)\n             ORDER BY q.cleared_at, q.id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "89929d00c704867bcd32d4291c1a484d6744a29c426bae1ee3cc09eba62ed923"
+}

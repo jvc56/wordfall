@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM quizzes WHERE origin = 'segment' AND origin_quiz_id = $1\n                          AND origin_attempt = $2 AND origin_segment_end = $3) AS \"d!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "d!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2ea59e522da26b4b1fd45398b0b9fd73d1448e101dc6f2f95dc1380265521adc"
+}

@@ -146,3 +146,43 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   (`contract-fixtures/cascade/rules.json`, "the ceil(question_count / S)
   bound") and both modules' tests assert 8 quizzes created by the attempt, of
   which 7 are segment chains.
+
+## PQ-012 — The wire form of `cursor`, `seen_seq` and `sync_seq` (open)
+
+- **Plan:** API (4177) gives the sync body `{ device_id, app_version, cursor, … }`
+  and the response's `sync_seq` without a type; § API (4186–4196) has every
+  pulled row's `updated_seq`, tombstone `seq` and `min_updated_seq` "as decimal
+  text".
+- **Issue:** Sequences are `BIGINT`s; the plan says nothing about whether the
+  request's `cursor` and each operation's `seen_seq` are JSON numbers or text,
+  or how `sync_seq` is sent.
+- **Provisional choice:** `sync_seq` is sent as decimal text, like the other
+  sequences on the wire; `cursor`, `seen_seq` and `device_seq` are accepted
+  as a JSON integer or as decimal digits (`backend/src/sync/routes.rs`,
+  `// PQ-012`). The device sends numbers (sequences stay far below 2^53).
+
+## PQ-013 — Check order for `finish` and `finish_segment` (open)
+
+- **Plan:** Operations table (2371–2372) lists, for both, "the quiz is active,
+  its cascade is not trashed, it is at the deepest level, the attempt and its
+  seed match, …, no quiz already exists for this quiz, attempt and segment
+  end". Conflicts (2805, 2810, 2811, 2816) and the Sync integration tests
+  (5423–5428, 5480–5484): a second `finish` after one that **reset** the quiz
+  is `stale_attempt`; the loser of a race on one boundary, and a device whose
+  run another device already passed, get `duplicate_segment`; "a
+  `finish_segment` after a `finish` is rejected because its attempt is out of
+  date".
+- **Issue:** Read as an order, the table's list makes those outcomes
+  unreachable: a finish that descended, and a `finish_segment` that drilled,
+  both add a level below the quiz, so the depth check would answer
+  `not_deepest` first.
+- **Provisional choice:** the table's conditions all hold, checked in the order
+  the Conflicts table and the tests require: live (active, not trashed), then
+  the attempt and seed, then — for `finish_segment` — the segment end's
+  validity and the duplicate, then the depth, then the cursor test and the
+  grading. Applied identically in `contract-fixtures/tools/reference.py`,
+  `backend/src/cascade/sim.rs`, `backend/src/sync/ops.rs` and
+  `frontend/src/lib/cascade/sim.ts` (each marked `PQ-013`), with a new rule
+  vector ("the attempt and a duplicate run come before the depth") that pins
+  it. The "Two different quizzes restored" row's `not_deepest` is unaffected,
+  since that finish carries a current attempt.

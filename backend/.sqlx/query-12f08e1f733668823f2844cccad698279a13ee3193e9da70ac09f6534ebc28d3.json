@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_preferences SET bindings_changed_at = $2, bindings_device_id = $3, updated_seq = $4 WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "12f08e1f733668823f2844cccad698279a13ee3193e9da70ac09f6534ebc28d3"
+}

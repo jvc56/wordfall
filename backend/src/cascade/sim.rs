@@ -195,8 +195,9 @@ impl SimCascade {
             }
             Op::Finish { quiz, attempt, attempt_seed, shuffle_seed, new_quiz_id } => {
                 let q = self.live(*quiz)?;
-                rules::check_deepest(&self.state, &q.state)?;
+                // PQ-013: the attempt before the depth.
                 rules::check_attempt(&q.state, *attempt, *attempt_seed)?;
+                rules::check_deepest(&self.state, &q.state)?;
                 if q.grades.len() as u32 != q.state.question_count {
                     return Err(Reason::Ungraded);
                 }
@@ -233,7 +234,7 @@ impl SimCascade {
             }
             Op::FinishSegment { quiz, attempt, attempt_seed, segment_end, shuffle_seed, new_quiz_id } => {
                 let q = self.live(*quiz)?;
-                rules::check_deepest(&self.state, &q.state)?;
+                // PQ-013: the attempt and the duplicate before the depth.
                 rules::check_attempt(&q.state, *attempt, *attempt_seed)?;
                 rules::check_segment_end(&q.state, *segment_end)?;
                 let duplicate = self.quizzes.values().any(|o| {
@@ -245,6 +246,7 @@ impl SimCascade {
                 if duplicate {
                     return Err(Reason::DuplicateSegment);
                 }
+                rules::check_deepest(&self.state, &q.state)?;
                 rules::check_segment_past_cursor(&q.state, *segment_end)?;
                 let pos = q.positions();
                 if pos[..*segment_end as usize].iter().any(|i| !q.grades.contains_key(i)) {

@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT trashed_at IS NOT NULL AS \"trashed!\", options_seq, options_device_id, options_changed_at\n           FROM cascades WHERE id = $1 AND user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trashed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "options_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "options_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "options_device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "options_device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "options_changed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "options_changed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3a883cefc6f6db8d3dc74f157718dadb9f89572dac693582412483fef2531f8d"
+}

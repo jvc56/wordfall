@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT question_idx FROM quiz_questions WHERE quiz_id = $1 AND grade = 'missed' ORDER BY question_idx",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_idx",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "question_idx"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a9622fbc9b06baced49aead50cc960eb4d5738d3dd2a14c5ee21832c68f09c66"
+}

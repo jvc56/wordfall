@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM cascades WHERE id = $1 RETURNING spec_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "spec_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "spec_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a28869eb3f3c4e1eac2178a3e0d1761231d1c0d9069d5dafc0644fef58015e87"
+}

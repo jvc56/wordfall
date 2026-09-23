@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET status = 'cleared', cleared_at = now(), last_activity_at = greatest(last_activity_at, $2),\n                                    updated_seq = $3 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25a58bb6800fcaa24e6e90da39ec4c9be1eaa1b0b739c2d53c334fd71797c791"
+}

@@ -4,8 +4,8 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 6 — Cascade rules and sync (next to start)
-- **Last green checkpoint:** Phase 5 — Cascade builder
+- **Phase:** 7a — Local-first player: IndexedDB stores (next to start)
+- **Last green checkpoint:** Phase 6 — Cascade rules and sync
 
 ## Environment notes (this machine)
 
@@ -215,22 +215,47 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   for the limit warning is not shown yet (needs local cascades store).
 - e2e: `tests/builder.spec.ts` (log in, preview 18, name, create).
 
+### Phase 6 — Cascade rules and sync ✅
+- Contract fixtures (independent of the code under test):
+  `contract-fixtures/tools/reference.py` (Python model of the rules, shuffle,
+  hash, leave text) → `gen_cascade.py` → `cascade/rules.json` (30 vectors,
+  3,381 steps), `cascade/random.json` (40 seeded sequences), `shuffle.json`,
+  `hash.json`, `leave_text.json`.
+- Rules: `backend/src/cascade/{order,rules,sim,vectors}.rs` and
+  `frontend/src/lib/cascade/{order,rules,sim,leave}.ts` pass every vector.
+  Check order per PQ-013 (attempt, then duplicate, before depth).
+- Sync: `backend/src/sync/` — `routes.rs` (`POST /api/sync`: request-level
+  400s, user-row lock, cursor-above-seq resync, savepoints, transient → 503,
+  `error` recording, acked_below pruning, 426, floor resync, paged pull,
+  session renewal PQ-003; questions + grades endpoints), `ops.rs` (13 op
+  kinds, conflicts, clamping, restart_clocks, tombstones,
+  `purge_cascade_rows`), `pull.rs` (page token with ceiling + qrf, 50,000
+  rows per page, `min_updated_seq`), `prefs.rs` (preferences/bindings
+  validation). PQ-012 (sequence wire forms).
+- Purge task: `backend/src/purge.rs` (advisory lock, per-user transactions,
+  cap oldest-first, trashed cascades whole, sync record pruning raising
+  `sync_floor_seq`, stale unconfirmed, export tokens, catalog status).
+- Tests: `tests/sync_vectors.rs` (all rule vectors through the server, DB
+  state + invariants), `tests/sync.rs` (19), `tests/conflicts.rs` (16, every
+  Conflicts row), `tests/pull.rs` (9), `tests/purge.rs` (7),
+  `tests/sync_faults.rs` (6: injected CHECK error, forced serialization
+  failure, purge vs sync, limits, session renewal, 300k finish/reset).
+  `tests/common/sync.rs` asserts every rejection reason is in the fixed list.
+
 ## Next
 
-Phase 6 — Cascade rules and sync. Re-read in full: Cascade Rules (78–427),
-Cascades (1817–1964), Offline and Sync → Operations (2365–2475), The sync
-cycle (2476–2797), Conflicts (2798–2884), Schema cascades/quizzes/sync
-(3434–3826) + Purge task (3827–3870), API → Cascades and sync (4166–4253:
-sync body/response, questions and grades endpoints), Testing → Contract
-fixtures (4782–4883), frontend unit list (5000+ for lib/cascade), integration
-sync tests (5334–5565). Order: (1) contract fixtures FIRST with independent
-reference scripts under `contract-fixtures/tools/` (shuffle vectors, question
-hashes incl. >2^63, leave value text, rule vectors); (2) Rust
-`backend/src/cascade/rules.rs` + TS `frontend/src/lib/cascade/` passing them;
-(3) `/api/sync` (push with savepoints, transient vs `error`, acked_below,
-paged pull with ceiling in page token, tombstones, resync_required, 426),
-questions + grades endpoints, sliding session renewal on sync (PQ-003); (4)
-purge task (per-user cap, trashed cascades whole, sync record pruning).
+Phase 7 — Local-first player, split into sub-milestones, each committed at
+green: **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
+temporary `lib/local/device.ts`), base/overlay/staging/outbox and
+`applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
+paged pull, rebase, notices, resync); **7c** download manager (window,
+budget, keep offline, card/key pages, questions endpoint); **7d** service
+worker; **7e** player; **7f** cascades, trash and account pages (builder
+defaults from preferences, cascade-count warning); **7g** export; **7h** e2e
+journeys and scale tests. Re-read before 7a: User Experience (428–1030),
+Offline and Sync (1965–2995, esp. On the device 1991–2364), Cascades
+(1817–1964), Frontend (4271–4415), API → Cascades and sync (4166–4253),
+frontend unit tests (5000–5298).
 
 ## Open PQs
 
@@ -244,6 +269,9 @@ purge task (per-user cap, trashed cascades whole, sync record pruning).
 - PQ-008 (anagram card answer shape; creation sync_seq as text) — provisional.
 - PQ-009 (In Word List entries are a set, returned in byte order) — provisional.
 - PQ-010 (client SEARCH_RATE constant; structural invalid-entry count) — provisional.
+- PQ-011 (40 questions at S=5: 7 chains + 1 descent) — provisional.
+- PQ-012 (sequence wire forms: sync_seq text, cursor number or text) — provisional.
+- PQ-013 (finish/finish_segment check order) — provisional.
 
 ## Known failing tests
 

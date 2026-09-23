@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO quiz_attempts (quiz_id, user_id, attempt, question_count, correct_count, missed_count, outcome,\n                                    shuffle_seed, finished_at, updated_seq)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        {
+          "Custom": {
+            "name": "finish_outcome",
+            "kind": {
+              "Enum": [
+                "cleared",
+                "replaced",
+                "descended",
+                "completed",
+                "reshuffled"
+              ]
+            }
+          }
+        },
+        "Int8",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bde4f3611dc8be2cd0e1cd03bed4e52b9aec896f9f9e1e57e67d74e9361a7880"
+}

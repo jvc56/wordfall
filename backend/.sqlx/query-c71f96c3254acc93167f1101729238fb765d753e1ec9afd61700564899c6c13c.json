@@ -1,0 +1,403 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT q.cascade_id, q.level, q.origin AS \"origin: Origin\", q.segment_chain, q.segment_size,\n                  q.progression AS \"progression: Progression\", q.require_alphabetical, q.attempt, q.shuffle_seed,\n                  q.question_count, q.correct_count, q.missed_count, q.cursor, q.cursor_device_id,\n                  q.cursor_moved_at, q.run_start, q.status AS \"status: QuizStatus\", q.updated_seq, q.options_seq,\n                  q.options_device_id, q.options_changed_at,\n                  c.clear_threshold, c.segment_size AS c_segment_size, c.progression AS \"c_progression: Progression\",\n                  c.require_alphabetical AS c_require_alphabetical, c.depth, c.peak_depth,\n                  c.attempts_since_completion, c.trashed_at IS NOT NULL AS \"trashed!\"\n           FROM quizzes q JOIN cascades c ON c.id = q.cascade_id\n           WHERE q.id = $1 AND q.user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cascade_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "cascade_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "level",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "origin: Origin",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_origin",
+            "kind": {
+              "Enum": [
+                "source",
+                "clear_replacement",
+                "drill_replacement",
+                "descent",
+                "segment"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "origin"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "segment_chain",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "segment_chain"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "segment_size",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "segment_size"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "progression: Progression",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_progression",
+            "kind": {
+              "Enum": [
+                "ladder",
+                "drill"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "progression"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "require_alphabetical",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "require_alphabetical"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "attempt",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "attempt"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "shuffle_seed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "shuffle_seed"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "question_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "question_count"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "correct_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "correct_count"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "missed_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "missed_count"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "cursor",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "cursor"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "cursor_device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "cursor_device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "cursor_moved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "cursor_moved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "run_start",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "run_start"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "status: QuizStatus",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "cleared"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "updated_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "updated_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "options_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "options_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "options_device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "options_device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "options_changed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "quizzes",
+            "name": "options_changed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "clear_threshold",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "clear_threshold"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "c_segment_size",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "segment_size"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "c_progression: Progression",
+        "type_info": {
+          "Custom": {
+            "name": "quiz_progression",
+            "kind": {
+              "Enum": [
+                "ladder",
+                "drill"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "progression"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "c_require_alphabetical",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "require_alphabetical"
+          }
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "depth",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "depth"
+          }
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "peak_depth",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "peak_depth"
+          }
+        }
+      },
+      {
+        "ordinal": 27,
+        "name": "attempts_since_completion",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "cascades",
+            "name": "attempts_since_completion"
+          }
+        }
+      },
+      {
+        "ordinal": 28,
+        "name": "trashed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "c71f96c3254acc93167f1101729238fb765d753e1ec9afd61700564899c6c13c"
+}

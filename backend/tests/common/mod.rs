@@ -3,6 +3,8 @@
 //! its own database on the server `make test-integration` starts.
 #![allow(dead_code)]
 
+pub mod sync;
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;

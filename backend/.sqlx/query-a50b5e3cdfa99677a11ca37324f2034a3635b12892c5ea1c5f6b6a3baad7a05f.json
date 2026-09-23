@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sync_tombstones (user_id, entity, entity_id, seq)\n                 SELECT $1, 'quiz', q, $3 FROM UNNEST($2::uuid[]) AS q\n                 ON CONFLICT (user_id, entity, entity_id) DO UPDATE SET seq = EXCLUDED.seq, deleted_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a50b5e3cdfa99677a11ca37324f2034a3635b12892c5ea1c5f6b6a3baad7a05f"
+}

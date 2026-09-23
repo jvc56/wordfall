@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quiz_questions SET grade = $3, graded_at = $4, graded_by_device_id = $5, updated_seq = $6\n         WHERE quiz_id = $1 AND question_idx = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        {
+          "Custom": {
+            "name": "grade",
+            "kind": {
+              "Enum": [
+                "correct",
+                "missed"
+              ]
+            }
+          }
+        },
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb9d810bd7e916389603da49390c9262289adb249eca3540e3448e5769d62b15"
+}

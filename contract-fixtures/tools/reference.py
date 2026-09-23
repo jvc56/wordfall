@@ -234,8 +234,10 @@ class Cascade:
 
     def op_finish(self, op):
         q = self.live_quiz(op["quiz"])
-        self.check_deepest(q)
+        # PQ-013: the attempt before the depth, so a finish racing one that
+        # descended is stale_attempt, as the Conflicts table says.
         self.check_attempt(q, op)
+        self.check_deepest(q)
         if len(q.grades) != len(q.idx):
             raise Rejected("ungraded")
         new_id = op["new_quiz_id"]
@@ -300,7 +302,8 @@ class Cascade:
 
     def op_finish_segment(self, op):
         q = self.live_quiz(op["quiz"])
-        self.check_deepest(q)
+        # PQ-013: the attempt, then the duplicate, before the depth, so a run
+        # already drilled on another device is duplicate_segment.
         self.check_attempt(q, op)
         end = op["segment_end"]
         s = q.segment_size
@@ -311,6 +314,7 @@ class Cascade:
             if (other.origin == "segment" and other.origin_quiz_id == q.id
                     and other.origin_attempt == q.attempt and other.origin_segment_end == end):
                 raise Rejected("duplicate_segment")
+        self.check_deepest(q)
         if end <= q.cursor:
             raise Rejected("bad_segment")
         pos = q.positions()

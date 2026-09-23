@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET status = 'active', cleared_at = NULL, level = $2, segment_size = $3, progression = $4,\n                            require_alphabetical = $5, options_changed_at = $6, options_seq = $7,\n                            options_device_id = $8, last_activity_at = greatest(last_activity_at, $6)\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4",
+        {
+          "Custom": {
+            "name": "quiz_progression",
+            "kind": {
+              "Enum": [
+                "ladder",
+                "drill"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Timestamptz",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "201a667678f47114da76edd9ee380cc83865f4f8eeb0540da0c8b0999a484379"
+}

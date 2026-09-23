@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM cascade_questions WHERE cascade_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0c2b67fb045a8d604b1ea4fe6c011a55cfb65a6d54afd9945c893f8e39b4e85e"
+}

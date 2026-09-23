@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sync_tombstones (user_id, entity, entity_id, seq) VALUES ($1, $2::text::sync_entity, $3, $4)\n         ON CONFLICT (user_id, entity, entity_id) DO UPDATE SET seq = EXCLUDED.seq, deleted_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "269290146993dc6c9b829535c7c10e88a1d788aef3b84c1de65bd9ea0bb250aa"
+}

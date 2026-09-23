@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT question_idx, grade AS \"grade!: Grade\", graded_at AS \"graded_at!\" FROM quiz_questions\n           WHERE quiz_id = $1 AND grade IS NOT NULL AND question_idx >= $2 AND question_idx < $3\n           ORDER BY question_idx",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "question_idx",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "question_idx"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "grade!: Grade",
+        "type_info": {
+          "Custom": {
+            "name": "grade",
+            "kind": {
+              "Enum": [
+                "correct",
+                "missed"
+              ]
+            }
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "grade"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "graded_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "quiz_questions",
+            "name": "graded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f45d47e1fd2bc980b5afa6140dee99c18bd2c67d8501d5185298ff9194bdbdc3"
+}

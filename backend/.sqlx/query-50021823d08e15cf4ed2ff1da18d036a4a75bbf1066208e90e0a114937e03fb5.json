@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE quizzes SET last_activity_at = greatest(last_activity_at, $2) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "50021823d08e15cf4ed2ff1da18d036a4a75bbf1066208e90e0a114937e03fb5"
+}

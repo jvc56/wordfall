@@ -475,6 +475,23 @@ def scenarios():
     v.play(l2, "CCCCM")
     v.finish_segment(l2, 5)  # a segment descent below the restored quiz: peak_depth 3
     out.append(v)
+
+    # -- Check order (PQ-013) -------------------------------------------------------
+    v = Vector("the attempt and a duplicate run come before the depth", [OPS, "PLAN.md § Conflicts", "PQ-013"],
+               count=10, opts=(5, "ladder", False))
+    v.play(v.source, "CCCCM")
+    chain, _ = v.finish_segment(v.source, 5)
+    v.finish_segment(v.source, 5, expect="duplicate_segment")  # not the deepest, but a duplicate
+    v.play(chain, "C")
+    v.finish(chain)
+    v.play(v.source, "CCCCM")
+    q = v.quiz(v.source)
+    old = {"attempt": q.attempt, "attempt_seed": str(q.seed)}
+    v.finish(v.source)  # descends: the Source quiz is reset and no longer the deepest
+    v.op({"type": "finish", "quiz": v.source, **old, "shuffle_seed": v.next_seed(), "new_quiz_id": v.next_id()},
+         expect="stale_attempt")
+    v.finish(v.source, expect="not_deepest")
+    out.append(v)
     return out
 
 

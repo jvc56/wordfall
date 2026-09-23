@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM quizzes WHERE id = $1)\n               OR EXISTS (SELECT 1 FROM sync_tombstones WHERE user_id = $2 AND entity = 'quiz' AND entity_id = $1)\n           AS \"taken!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "taken!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6a453d0cda0229a8dc5fcb056595f5d2abf9eed14f72356241f59daf32b77ba3"
+}

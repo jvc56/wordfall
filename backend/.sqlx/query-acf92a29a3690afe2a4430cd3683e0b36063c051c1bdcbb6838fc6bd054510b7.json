@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE cascades SET depth = $2, peak_depth = $3, attempts_since_completion = $4,\n                             trashed_at = CASE WHEN $5 THEN trashed_at ELSE NULL END,\n                             last_activity_at = CASE WHEN $6::timestamptz IS NULL THEN last_activity_at\n                                                     ELSE greatest(last_activity_at, $6) END,\n                             updated_seq = $7\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Bool",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acf92a29a3690afe2a4430cd3683e0b36063c051c1bdcbb6838fc6bd054510b7"
+}

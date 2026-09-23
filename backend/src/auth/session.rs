@@ -59,6 +59,7 @@ fn max_age_until(expires: DateTime<Utc>, now: DateTime<Utc>) -> cookie::time::Du
 
 /// Set-Cookie headers for a session and its CSRF token. The CSRF cookie
 /// carries the same lifetime as the session cookie, never a browser-session one.
+#[derive(Clone)]
 pub struct SessionCookies {
     pub session: Option<Cookie<'static>>,
     pub csrf: Cookie<'static>,
