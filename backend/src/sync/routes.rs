@@ -159,24 +159,39 @@ async fn record(
     conn: &mut sqlx::PgConnection,
     user: Uuid,
     device: Uuid,
-    op: &IncomingOp,
-    r: &OpResult,
+    ops: &[(&IncomingOp, OpResult)],
 ) -> Result<(), sqlx::Error> {
+    if ops.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<Uuid> = ops.iter().map(|(o, _)| o.id).collect();
+    let seqs: Vec<i64> = ops.iter().map(|(o, _)| o.device_seq).collect();
+    let types: Vec<String> = ops.iter().map(|(o, _)| o.op_type.clone()).collect();
+    let statuses: Vec<String> = ops.iter().map(|(_, r)| r.status.to_owned()).collect();
+    let reasons: Vec<Option<String>> = ops.iter().map(|(_, r)| r.reason.clone()).collect();
+    let outcomes: Vec<Option<String>> = ops.iter().map(|(_, r)| r.outcome.clone()).collect();
+    let counts: Vec<Option<i32>> = ops.iter().map(|(_, r)| r.new_quiz_question_count).collect();
+    let hashes: Vec<Option<i64>> = ops
+        .iter()
+        .map(|(_, r)| r.new_quiz_questions_hash.as_ref().map(|h| to_i64(h.parse::<u64>().unwrap_or(0))))
+        .collect();
     sqlx::query(
         "INSERT INTO sync_operations (id, user_id, device_id, device_seq, op_type, status, reason, outcome,
                                       new_quiz_question_count, new_quiz_questions_hash)
-         VALUES ($1, $2, $3, $4, $5::sync_op_type, $6::sync_op_status, $7, $8, $9, $10)",
+         SELECT u.id, $2, $3, u.seq, u.t::sync_op_type, u.s::sync_op_status, u.r, u.o, u.c, u.h
+         FROM UNNEST($1::uuid[], $4::int8[], $5::text[], $6::text[], $7::text[], $8::text[], $9::int4[], $10::int8[])
+              AS u(id, seq, t, s, r, o, c, h)",
     )
-    .bind(op.id)
+    .bind(&ids)
     .bind(user)
     .bind(device)
-    .bind(op.device_seq)
-    .bind(&op.op_type)
-    .bind(r.status)
-    .bind(&r.reason)
-    .bind(&r.outcome)
-    .bind(r.new_quiz_question_count)
-    .bind(r.new_quiz_questions_hash.as_ref().map(|h| to_i64(h.parse::<u64>().unwrap_or(0))))
+    .bind(&seqs)
+    .bind(&types)
+    .bind(&statuses)
+    .bind(&reasons)
+    .bind(&outcomes)
+    .bind(&counts)
+    .bind(&hashes)
     .execute(conn)
     .await?;
     Ok(())
@@ -255,6 +270,8 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
     .into_iter()
     .collect();
     let mut results = Vec::with_capacity(req.ops.len());
+    // Written together after the loop, one statement for the batch.
+    let mut recorded_here: Vec<(&IncomingOp, OpResult)> = Vec::with_capacity(req.ops.len());
     for op in &req.ops {
         // A repeated operation returns its recorded result, unchanged.
         if let Some(p) = prior.get(&op.id) {
@@ -303,11 +320,12 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
                 }
             }
         };
-        record(&mut tx, user, req.device_id, op, &result).await.map_err(transient)?;
+        recorded_here.push((op, result.clone()));
         prior.insert(op.id, result.clone());
         used.insert(op.device_seq);
         results.push(result);
     }
+    record(&mut tx, user, req.device_id, &recorded_here).await.map_err(transient)?;
     if let Some(min) = req.ops.iter().map(|o| o.device_seq).filter(|s| *s >= 1).min() {
         let new_mark = sqlx::query_scalar!(
             "INSERT INTO sync_devices (user_id, device_id, acked_below) VALUES ($1, $2, $3)

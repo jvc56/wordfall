@@ -1,11 +1,10 @@
-// The device's half of PLAN.md § Scale tests: a device (IndexedDB through
-// fake-indexeddb, the real sync engine and download manager) against the
-// in-memory server, with every request counted and weighed and every
-// IndexedDB write counted. `make test-scale` runs the *.scale.ts files that
-// use it (vitest.scale.config.ts), each in its own process.
-import 'fake-indexeddb/auto';
-import { IDBFactory } from 'fake-indexeddb';
+// The device's half of PLAN.md § Scale tests: a device (the browser's own
+// IndexedDB, the real sync engine and download manager) against the in-memory
+// server, with every request counted and weighed and every IndexedDB write
+// counted. `make test-scale` runs the *.scale.ts files that use it in
+// Chromium (vitest.scale.config.ts).
 import { applyLocally, APPLY_STORES, type NewOp } from '$lib/local/apply';
+import { userDbName } from '$lib/local/accounts';
 import { openUserDb, type UserDb, type StoreName } from '$lib/local/db';
 import { initMeta, recordOpen } from '$lib/local/meta';
 import * as view from '$lib/local/view';
@@ -74,7 +73,13 @@ export class ScaleDev {
 	static async make(server: FakeServer, user = '33333333-3333-4333-8333-333333333333', o: { rowBudget?: number } = {}) {
 		countWrites();
 		const d = new ScaleDev();
-		globalThis.indexedDB = new IDBFactory();
+		// A fresh database: each device of a test has its own user id, and a
+		// test never sees what an earlier one left.
+		await new Promise<void>((res, rej) => {
+			const r = indexedDB.deleteDatabase(userDbName(user));
+			r.onsuccess = () => res();
+			r.onerror = () => rej(r.error);
+		});
 		d.db = await openUserDb(user);
 		await initMeta(d.db, user, 'scale');
 		const clock = () => new Date(d.now);

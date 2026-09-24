@@ -13,3 +13,4 @@ __pycache__/
 /infra/*.tfstate*
 /infra/.terraform.lock.hcl.bak
 /backups/
+/frontend/.vitest/

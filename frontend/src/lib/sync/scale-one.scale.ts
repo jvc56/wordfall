@@ -14,14 +14,19 @@ import { OVERLAY } from '$lib/local/db';
 import { FakeServer } from './testing/fake-server';
 import { ids, QUESTIONS, report, ScaleDev, timed, writes } from './testing/scale';
 
-const CREATE_BUDGET_MS = 10_000;
-/** 3 keys pages and 30 answer pages into IndexedDB. */
-const DOWNLOAD_BUDGET_MS = 300_000;
+// Budgets for disk-backed Chromium IndexedDB, which writes about 5,000–15,000
+// indexed rows a second on the development machine (creation measured 18–73 s
+// across runs): generous enough for a CI runner, tight enough to catch a
+// regression by an order of magnitude (a transaction per row, say).
+/** 300,000 Source rows with positions, written in one transaction. */
+const CREATE_BUDGET_MS = 120_000;
+/** Positions, 3 keys pages and 30 answer pages into IndexedDB. */
+const DOWNLOAD_BUDGET_MS = 600_000;
 /** 600 requests, each acknowledged batch rebased. */
-const PUSH_BUDGET_MS = 600_000;
+const PUSH_BUDGET_MS = 1_800_000;
 /** A second device's pull of the cascade with its 300,000 graded rows. */
-const PULL_BUDGET_MS = 300_000;
-const FINISH_BUDGET_MS = 120_000;
+const PULL_BUDGET_MS = 900_000;
+const FINISH_BUDGET_MS = 300_000;
 /** The drain's IndexedDB writes per operation it pushed. */
 const WRITES_PER_OP = 6;
 /** Overlay rows left once the outbox has drained. */
@@ -35,9 +40,10 @@ describe('a 300,000-question cascade on the device', () => {
 		const { cascade, source } = ids(1);
 		const d = await ScaleDev.make(server);
 
-		// Creation: the server's reply stored as the device stores it.
+		// Creation: the server's reply stored as the device stores it (the
+		// in-memory server's own work is not the device's, so it is outside the timing).
+		const created = server.create({ id: cascade, source_id: source, count: QUESTIONS });
 		const [, createMs] = await timed(async () => {
-			const created = server.create({ id: cascade, source_id: source, count: QUESTIONS });
 			await storeCreated(d.db, created);
 			await d.open(cascade);
 		});
