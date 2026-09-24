@@ -48,3 +48,20 @@ resource "aws_iam_role_policy" "task_ses" {
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task_ses.json
 }
+
+# ECS Exec sessions into the backend container (docs/runbook.md: granting admin).
+data "aws_iam_policy_document" "task_exec" {
+  statement {
+    actions = [
+      "ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "task_exec" {
+  name   = "ecs-exec"
+  role   = aws_iam_role.task.id
+  policy = data.aws_iam_policy_document.task_exec.json
+}

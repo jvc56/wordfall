@@ -175,7 +175,7 @@
 					<Button size="sm" variant="outline" disabled={count >= CASCADE_LIMIT} onclick={() => startOver(s)}>Start over</Button>
 					<label class="flex items-center gap-1">
 						<input type="checkbox" checked={s.keptByUser || s.keptAutomatically} onchange={(e) => toggleKeep(s, e.currentTarget.checked)} />
-						Keep offline{#if hint}<span class="text-muted-foreground"> ({hint})</span>{/if}
+						Keep offline{#if hint}<span class="text-muted-foreground">{` (${hint})`}</span>{/if}
 					</label>
 					<Button size="sm" variant="outline" onclick={() => write({ type: 'trash_cascade', cascade_id: s.cascade.id })}>Move to Trash</Button>
 				</div>

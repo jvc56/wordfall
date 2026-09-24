@@ -90,7 +90,7 @@
 				<tbody>
 					{#each kept as k (k.id)}
 						<tr>
-							<td>{k.name}{#if !k.user}<span class="text-muted-foreground"> (kept automatically)</span>{/if}</td>
+							<td>{k.name}{#if !k.user}<span class="text-muted-foreground">{' (kept automatically)'}</span>{/if}</td>
 							<td>{mb(k.answer)}</td>
 							<td>{mb(k.keys)}</td>
 							<td><input type="checkbox" checked aria-label={`Keep ${k.name} offline`} onchange={(e) => toggle(k, e.currentTarget.checked)} /></td>

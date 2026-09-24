@@ -1,0 +1,74 @@
+# PLAN.md § Deployment and Operations → Deploys: build and push both images,
+# then update the ECS service. The backend runs migrations before it binds,
+# and the ALB health check waits for /health (catalog indexes loaded) before
+# sending traffic. Run by hand from the Actions tab once CI is green on main.
+#
+# Needs, set out of band (see docs/runbook.md): repository variables
+# AWS_REGION and AWS_DEPLOY_ROLE_ARN (the role infra/github.tf creates).
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push both images
+        id: images
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          # The monotonic build number the sync request carries and
+          # MIN_APP_VERSION is compared against, and the commit it came from.
+          APP_BUILD: ${{ github.run_number }}
+          APP_COMMIT: ${{ github.sha }}
+        run: |
+          tag="${APP_BUILD}-${APP_COMMIT::12}"
+          docker build -f docker/backend.Dockerfile -t "$REGISTRY/wordfall-backend:$tag" .
+          docker build -f docker/frontend.Dockerfile --build-arg APP_BUILD="$APP_BUILD" --build-arg APP_COMMIT="$APP_COMMIT" \
+            -t "$REGISTRY/wordfall-frontend:$tag" .
+          docker push "$REGISTRY/wordfall-backend:$tag"
+          docker push "$REGISTRY/wordfall-frontend:$tag"
+          echo "backend=$REGISTRY/wordfall-backend:$tag" >> "$GITHUB_OUTPUT"
+          echo "frontend=$REGISTRY/wordfall-frontend:$tag" >> "$GITHUB_OUTPUT"
+      - name: New task definition revisions (app and nightly dump)
+        id: taskdef
+        env:
+          BACKEND: ${{ steps.images.outputs.backend }}
+          FRONTEND: ${{ steps.images.outputs.frontend }}
+        run: |
+          revise() {
+            aws ecs describe-task-definition --task-definition "$1" --query taskDefinition \
+            | jq --arg b "$BACKEND" --arg f "$FRONTEND" '
+                .containerDefinitions |= map(
+                  if .name == "nginx" then .image = $f else .image = $b end)
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                      .registeredAt, .registeredBy, .deregisteredAt)' > "$1.json"
+            aws ecs register-task-definition --cli-input-json "file://$1.json" \
+              --query taskDefinition.taskDefinitionArn --output text
+          }
+          echo "app=$(revise wordfall)" >> "$GITHUB_OUTPUT"
+          # The scheduler runs the family's latest revision, so the dump uses this image too.
+          revise wordfall-backup > /dev/null
+      - name: Update the service and wait for it to settle
+        run: |
+          aws ecs update-service --cluster wordfall --service wordfall \
+            --task-definition "${{ steps.taskdef.outputs.app }}" > /dev/null
+          aws ecs wait services-stable --cluster wordfall --services wordfall

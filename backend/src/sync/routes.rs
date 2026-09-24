@@ -1,7 +1,7 @@
 //! `POST /api/sync`, and the questions and grades endpoints (PLAN.md § API →
 //! Cascades and sync).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderValue, StatusCode};
@@ -220,24 +220,45 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
     .await
     .map_err(transient)?
     .unwrap_or(1);
-    let ctx = Ctx { user, device: req.device_id, seq, cap: state.config.max_quiz_questions };
+    // `now()` is the transaction's start and fixed for its length.
+    let now: DateTime<Utc> = sqlx::query_scalar("SELECT now()").fetch_one(&mut *tx).await.map_err(transient)?;
+    let ctx = Ctx { user, device: req.device_id, seq, cap: state.config.max_quiz_questions, now };
+    // The batch's recorded operations and used device_seqs, read once rather
+    // than twice per operation; each operation recorded below joins them, so
+    // a repeat later in the same batch is answered exactly as before.
+    let ids: Vec<Uuid> = req.ops.iter().map(|o| o.id).collect();
+    let rows: Vec<(Uuid, Uuid, String, Option<String>, Option<String>, Option<i32>, Option<i64>)> = sqlx::query_as(
+        "SELECT id, user_id, status::text, reason, outcome, new_quiz_question_count, new_quiz_questions_hash
+         FROM sync_operations WHERE id = ANY($1)",
+    )
+    .bind(&ids)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(transient)?;
+    let mut prior: HashMap<Uuid, OpResult> = rows
+        .into_iter()
+        .map(|(id, owner, status, reason, outcome, count, hash)| {
+            let r = if owner != user { OpResult::rejected(id, Reason::NotFound) } else { recorded(id, &status, reason, outcome, count, hash) };
+            (id, r)
+        })
+        .collect();
+    let seqs: Vec<i64> = req.ops.iter().map(|o| o.device_seq).collect();
+    let mut used: HashSet<i64> = sqlx::query_scalar::<_, i64>(
+        "SELECT device_seq FROM sync_operations WHERE user_id = $1 AND device_id = $2 AND device_seq = ANY($3)",
+    )
+    .bind(user)
+    .bind(req.device_id)
+    .bind(&seqs)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(transient)?
+    .into_iter()
+    .collect();
     let mut results = Vec::with_capacity(req.ops.len());
     for op in &req.ops {
         // A repeated operation returns its recorded result, unchanged.
-        let prior = sqlx::query!(
-            r#"SELECT user_id, status::text AS "status!", reason, outcome, new_quiz_question_count, new_quiz_questions_hash
-               FROM sync_operations WHERE id = $1"#,
-            op.id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(transient)?;
-        if let Some(p) = prior {
-            if p.user_id != user {
-                results.push(OpResult::rejected(op.id, Reason::NotFound));
-            } else {
-                results.push(recorded(op.id, &p.status, p.reason, p.outcome, p.new_quiz_question_count, p.new_quiz_questions_hash));
-            }
+        if let Some(p) = prior.get(&op.id) {
+            results.push(p.clone());
             continue;
         }
         if op.device_seq < 1 {
@@ -249,15 +270,7 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
             results.push(OpResult::applied(op.id));
             continue;
         }
-        let reused = sqlx::query_scalar!(
-            r#"SELECT EXISTS (SELECT 1 FROM sync_operations WHERE user_id = $1 AND device_id = $2 AND device_seq = $3) AS "e!""#,
-            user,
-            req.device_id,
-            op.device_seq
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(transient)?;
+        let reused = used.contains(&op.device_seq);
         if reused || !OP_TYPES.contains(&op.op_type.as_str()) {
             results.push(OpResult::rejected(op.id, Reason::Invalid));
             continue;
@@ -291,6 +304,8 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
             }
         };
         record(&mut tx, user, req.device_id, op, &result).await.map_err(transient)?;
+        prior.insert(op.id, result.clone());
+        used.insert(op.device_seq);
         results.push(result);
     }
     if let Some(min) = req.ops.iter().map(|o| o.device_seq).filter(|s| *s >= 1).min() {
@@ -318,9 +333,11 @@ async fn push(state: &AppState, user: Uuid, req: &Request) -> Result<Pushed, Api
         .await
         .map_err(transient)?;
     }
-    for r in &results {
+    // Counted by type and reason from the logs (PLAN.md § Deployment and
+    // Operations → Monitoring; infra/alarms.tf).
+    for (op, r) in req.ops.iter().zip(&results) {
         if r.status == "rejected" {
-            tracing::info!(reason = r.reason.as_deref().unwrap_or(""), "sync operation rejected");
+            tracing::info!(op_type = %op.op_type, reason = r.reason.as_deref().unwrap_or(""), "sync operation rejected");
         }
     }
     tx.commit().await.map_err(transient)?;

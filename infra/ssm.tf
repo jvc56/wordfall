@@ -5,6 +5,8 @@ locals {
   secret_names = {
     DATABASE_URL        = "${local.ssm_prefix}/DATABASE_URL"
     SESSION_SIGNING_KEY = "${local.ssm_prefix}/SESSION_SIGNING_KEY"
+    # The nightly dump's read-only role (PLAN.md § Backups); not given to the app.
+    BACKUP_DATABASE_URL = "${local.ssm_prefix}/BACKUP_DATABASE_URL"
   }
 }
 

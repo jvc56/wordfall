@@ -12,3 +12,4 @@ __pycache__/
 /infra/.terraform/
 /infra/*.tfstate*
 /infra/.terraform.lock.hcl.bak
+/backups/

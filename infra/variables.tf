@@ -3,6 +3,12 @@ variable "region" {
   default = "us-east-1"
 }
 
+variable "backup_region" {
+  description = "A second region for the nightly dumps (PLAN.md § Backups); must differ from region."
+  type        = string
+  default     = "us-west-2"
+}
+
 variable "environment" {
   type    = string
   default = "production"

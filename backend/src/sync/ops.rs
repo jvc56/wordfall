@@ -37,6 +37,9 @@ pub struct Ctx {
     pub device: Uuid,
     pub seq: i64,
     pub cap: u32,
+    /// The transaction's `now()`, which is fixed for its length: device times
+    /// are clamped to it plus five minutes without a round trip per operation.
+    pub now: DateTime<Utc>,
 }
 
 // ---------------------------------------------------------------------------
@@ -140,10 +143,8 @@ pub async fn load_quiz(conn: &mut PgConnection, user: Uuid, quiz_id: Uuid) -> Re
 }
 
 /// The clamped device time: `least(at, now() + 5 minutes)`.
-async fn clamp(conn: &mut PgConnection, at: DateTime<Utc>) -> Result<DateTime<Utc>, sqlx::Error> {
-    sqlx::query_scalar!(r#"SELECT LEAST($1::timestamptz, now() + interval '5 minutes') AS "t!""#, at)
-        .fetch_one(conn)
-        .await
+fn clamp(ctx: &Ctx, at: DateTime<Utc>) -> DateTime<Utc> {
+    at.min(ctx.now + chrono::Duration::minutes(5))
 }
 
 async fn write_cascade(
@@ -331,7 +332,7 @@ async fn grade(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> OpResult 
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(OpError::Rejected(Reason::NotFound))?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     // The question is ungraded, or its grade is this device's, or the device
     // had seen it, or this change is later.
     let wins = row.grade.is_none()
@@ -382,7 +383,7 @@ async fn move_cursor(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> OpR
     rules::check_live(&l.cascade, &l.quiz)?;
     rules::check_attempt(&l.quiz, attempt, attempt_seed)?;
     rules::check_move_cursor(&l.quiz, position)?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let wins = l.cursor_moved_at.is_none()
         || l.cursor_device_id == Some(ctx.device)
         || l.updated_seq <= op.seen_seq
@@ -446,7 +447,7 @@ async fn finish(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> OpResult
         return Err(OpError::Rejected(Reason::Ungraded));
     }
     id_free(conn, ctx.user, new_id).await?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let misses: Vec<i32> = sqlx::query_scalar!(
         "SELECT question_idx FROM quiz_questions WHERE quiz_id = $1 AND grade = 'missed' ORDER BY question_idx",
         quiz
@@ -541,7 +542,7 @@ async fn finish_segment(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> 
         return Err(OpError::Rejected(Reason::Ungraded));
     }
     id_free(conn, ctx.user, new_id).await?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let run_misses: Vec<i32> = sqlx::query_scalar!(
         "SELECT question_idx FROM quiz_questions WHERE quiz_id = $1 AND position >= $2 AND position < $3
            AND grade = 'missed' ORDER BY question_idx",
@@ -585,7 +586,7 @@ async fn restore_quiz(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> Op
     if l.quiz.active {
         return Err(OpError::Rejected(Reason::NotCleared));
     }
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let r = rules::restore_quiz(&mut l.cascade, &l.quiz, seed);
     let qs = reset_quiz(conn, ctx, quiz, r.attempt, r.seed, at).await?;
     sqlx::query!(
@@ -673,7 +674,7 @@ async fn restore_cascade(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) ->
     if !c.trashed {
         return Err(OpError::Rejected(Reason::NotTrashed));
     }
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     sqlx::query!(
         "UPDATE cascades SET trashed_at = NULL, last_activity_at = greatest(last_activity_at, $2), updated_seq = $3
          WHERE id = $1",
@@ -793,7 +794,7 @@ async fn set_cascade_options(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp
         return Err(OpError::Rejected(Reason::Trashed));
     }
     let f = option_fields(op, ctx.cap)?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     if !options_win(ctx, op, c.options_device_id, c.options_seq, c.options_changed_at, at) {
         return Err(OpError::Rejected(Reason::Stale));
     }
@@ -822,7 +823,7 @@ async fn set_quiz_options(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -
     rules::check_live(&l.cascade, &l.quiz)?;
     let f = option_fields(op, ctx.cap)?;
     rules::check_quiz_option_fields(&l.quiz, f.progression.is_some(), f.segment_size.is_some())?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     if !options_win(ctx, op, l.options_device_id, l.options_seq, l.options_changed_at, at) {
         return Err(OpError::Rejected(Reason::Stale));
     }
@@ -857,7 +858,7 @@ async fn set_preferences(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) ->
     )
     .fetch_one(&mut *conn)
     .await?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let wins = row.changed_by_device_id == Some(ctx.device) || row.updated_seq <= op.seen_seq || at > row.changed_at;
     if !wins {
         return Err(OpError::Rejected(Reason::Stale));
@@ -901,7 +902,7 @@ async fn set_bindings(conn: &mut PgConnection, ctx: &Ctx, op: &IncomingOp) -> Op
     )
     .fetch_one(&mut *conn)
     .await?;
-    let at = clamp(conn, at).await?;
+    let at = clamp(ctx, at);
     let wins = row.bindings_device_id == Some(ctx.device) || row.updated_seq <= op.seen_seq || at > row.bindings_changed_at;
     if !wins {
         return Err(OpError::Rejected(Reason::Stale));

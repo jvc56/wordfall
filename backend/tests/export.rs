@@ -203,6 +203,8 @@ async fn a_token_from_one_instance_is_redeemed_once_on_either(pool: sqlx::PgPool
     let a = app(pool.clone(), &[]).await;
     let b = app(pool, &[]).await;
     let mut c = a.seed_fixture_catalog("root").await;
+    // The second instance has the catalog a uploaded (LISTEN/NOTIFY would bring it; not the point here).
+    b.reconcile().await;
     let (cascade, _) = create(&mut c, "anagram", "Sevens").await;
     let choices = json!({ "scope": "cascade", "which": "all", "format": "txt", "lines": "questions", "order": "study", "decimals": 1 });
     let url = token(&mut c, &cascade, choices).await.json()["url"].as_str().unwrap().to_owned();

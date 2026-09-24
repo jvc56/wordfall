@@ -1,0 +1,78 @@
+# PLAN.md § Running the tests: CI runs `make test` on every push and
+# `make test-scale` nightly. Parity never runs here: its data cannot be
+# committed. Every job uses the same one-command entry points a developer does.
+name: CI
+
+on:
+  push:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.98"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - name: Chromium and its system libraries for Playwright
+        run: cd e2e && npm ci && npx playwright install --with-deps chromium
+      - name: make test (unit, integration, end-to-end)
+        run: make test
+      # § End-to-end tests → What the tests reuse: "CI runs it once more with
+      # ADMIN_UPLOAD_RATE_PER_MINUTE=2, where seeding must wait out 429s and still finish".
+      - name: Seeding under a two-a-minute upload limit
+        run: |
+          python3 scripts/stack.py up --project wordfall-ci-seed --port 5190 --env ADMIN_UPLOAD_RATE_PER_MINUTE=2
+          python3 scripts/stack.py seed --project wordfall-ci-seed --port 5190
+      - name: Stacks down, volumes and all
+        if: always()
+        run: |
+          for p in wordfall-e2e wordfall-e2e-ttl wordfall-e2e-purge wordfall-e2e-limits wordfall-e2e-answers wordfall-e2e-budget wordfall-ci-seed; do
+            python3 scripts/stack.py down --project "$p" --volumes || true
+          done
+      - name: Traces of failed journeys
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: e2e/test-results
+          if-no-files-found: ignore
+
+  scale:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.98"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: make test-scale (the 300,000-question budgets)
+        run: make test-scale

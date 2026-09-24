@@ -66,6 +66,44 @@ impl Mailer for ConsoleMailer {
     }
 }
 
+/// `MAIL_BACKEND=ses`: sent through the SES v2 API as `MAIL_FROM`, with the
+/// task role's credentials and region from the environment (PLAN.md §
+/// Deployment and Operations: "SES domain identity"). The code or token is
+/// never logged.
+pub struct SesMailer {
+    client: aws_sdk_sesv2::Client,
+    from: String,
+}
+
+impl SesMailer {
+    pub async fn from_env(from: String) -> Self {
+        let config = aws_config::load_from_env().await;
+        SesMailer { client: aws_sdk_sesv2::Client::new(&config), from }
+    }
+}
+
+impl Mailer for SesMailer {
+    fn send<'a>(&'a self, email: Email) -> SendFuture<'a> {
+        use aws_sdk_sesv2::types::{Body, Content, Destination, EmailContent, Message};
+        Box::pin(async move {
+            let text = |s: &str| Content::builder().data(s).charset("UTF-8").build();
+            let message = Message::builder()
+                .subject(text(&email.subject)?)
+                .body(Body::builder().text(text(&email.body)?).build())
+                .build();
+            self.client
+                .send_email()
+                .from_email_address(&self.from)
+                .destination(Destination::builder().to_addresses(&email.to).build())
+                .content(EmailContent::builder().simple(message).build())
+                .send()
+                .await?;
+            tracing::info!(mail_to = %email.to, subject = %email.subject, "mail sent");
+            Ok(())
+        })
+    }
+}
+
 /// Keeps every email, for tests.
 #[derive(Default, Clone)]
 pub struct RecordingMailer {

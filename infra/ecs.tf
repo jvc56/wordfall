@@ -46,7 +46,7 @@ resource "aws_ecs_task_definition" "app" {
       image        = var.backend_image
       essential    = true
       environment  = [for k, v in local.backend_env : { name = k, value = v }]
-      secrets      = [for k, p in aws_ssm_parameter.secret : { name = k, valueFrom = p.arn }]
+      secrets      = [for k, p in aws_ssm_parameter.secret : { name = k, valueFrom = p.arn } if k != "BACKUP_DATABASE_URL"]
       portMappings = [{ containerPort = 8080, protocol = "tcp" }]
       healthCheck = {
         command     = ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
@@ -80,6 +80,8 @@ resource "aws_ecs_service" "app" {
   desired_count                     = var.desired_count
   launch_type                       = "FARGATE"
   health_check_grace_period_seconds = 300
+  # ECS Exec, for the runbook's one-off SQL (granting admin) with the image's psql.
+  enable_execute_command = true
   # A rolling deploy may briefly run a third task; its limits are per task too.
   deployment_minimum_healthy_percent = 50
   deployment_maximum_percent         = 100
@@ -97,4 +99,10 @@ resource "aws_ecs_service" "app" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  # Deploys roll the service onto new task definition revisions
+  # (.github/workflows/deploy.yml); an apply must not roll it back.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }

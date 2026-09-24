@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::compression::CompressionLayer;
 
-use crate::auth::mail::{ConsoleMailer, EmailCaps, Mailer};
+use crate::auth::mail::{ConsoleMailer, EmailCaps, Mailer, SesMailer};
 use crate::auth::tokens::Keys;
 use crate::catalog::Catalog;
 use crate::clock::Clock;
@@ -76,10 +76,10 @@ pub fn build_router(state: AppState) -> Router {
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
-pub fn mailer_for(config: &Config) -> anyhow::Result<Arc<dyn Mailer>> {
+pub async fn mailer_for(config: &Config) -> anyhow::Result<Arc<dyn Mailer>> {
     match config.mail_backend {
         MailBackend::Console => Ok(Arc::new(ConsoleMailer)),
-        MailBackend::Ses => anyhow::bail!("MAIL_BACKEND=ses is not available in this build yet"),
+        MailBackend::Ses => Ok(Arc::new(SesMailer::from_env(config.mail_from.clone()).await)),
     }
 }
 
@@ -92,7 +92,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         .await?;
     MIGRATOR.run(&db).await?;
     let bind_addr = config.bind_addr;
-    let mailer = mailer_for(&config)?;
+    let mailer = mailer_for(&config).await?;
     let state = AppState::new(db, config, mailer);
     // Bind first so /health can answer "not ready" while the catalog loads.
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
