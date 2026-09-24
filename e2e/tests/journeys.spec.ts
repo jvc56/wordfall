@@ -13,9 +13,11 @@ async function ready(page: Page) {
 	});
 }
 
-async function availableOffline(page: Page) {
+/** Waits for the named cascade's own "Available offline" badge (another cascade's would not do). */
+async function availableOffline(page: Page, name: string) {
 	await page.goto('/cascades');
-	await expect(page.getByText('Available offline')).toBeVisible({ timeout: 60_000 });
+	const entry = page.getByRole('listitem').filter({ has: page.getByRole('link', { name, exact: true }) });
+	await expect(entry.getByText('Available offline')).toBeVisible({ timeout: 60_000 });
 	await ready(page);
 }
 
@@ -28,7 +30,7 @@ test('answers gone, questions kept; a download stopped part way', async ({ page,
 	test.setTimeout(240_000);
 	const { username } = await newUser(page, 'gone');
 	const player = await createCascade(page, { name: 'Evicted' });
-	await availableOffline(page);
+	await availableOffline(page, 'Evicted');
 	await page.goto(player);
 	await playerPref(page, 'Anagram answer mode', 'typed');
 	await evictAnswers(page);
@@ -54,7 +56,7 @@ test('answers gone, questions kept; a download stopped part way', async ({ page,
 
 	// A download stopped part way: only the first two cards' keys arrived.
 	const partial = await createCascade(page, { name: 'Partial' });
-	await availableOffline(page);
+	await availableOffline(page, 'Partial');
 	await context.setOffline(true);
 	await idb(
 		page,
@@ -69,6 +71,8 @@ test('answers gone, questions kept; a download stopped part way', async ({ page,
 	);
 	await page.goto(partial);
 	await expect(page.getByText('1 / 18')).toBeVisible({ timeout: 30_000 });
+	// Flashcards again: in typed mode Space would type into the answer rather than move on.
+	await playerPref(page, 'Anagram answer mode', 'flashcard');
 	for (let i = 0; i < 2; i++) {
 		await press(page, 'Space');
 		await press(page, 'Space');
@@ -92,7 +96,7 @@ test('trash: export a cleared quiz’s missed words offline, see purge dates, re
 	const player = await createCascade(page, { name: 'Trash journey' });
 	expect(await playLevel(page, (i) => i < 5)).toMatch(/^Level 1/);
 	expect(await playLevel(page, (i) => i === 0)).toBe('Level 2 cleared with 80%. Its 1 missed questions are now Level 2.');
-	await availableOffline(page);
+	await availableOffline(page, 'Trash journey');
 	await context.setOffline(true);
 	await page.goto('/trash');
 	await expect(page.getByText(/^purges \d/).first()).toBeVisible();
@@ -134,7 +138,7 @@ test('export: counts, offline files, the definitions fallback, and one file thro
 	await press(page, 'Space');
 	await press(page, 'Space');
 	await expect(page.getByText('3 / 3')).toBeVisible();
-	await availableOffline(page);
+	await availableOffline(page, 'Export journey');
 	const exportPage = `${player}/export`;
 	// With the cards complete, the question count and the entry count.
 	await page.goto(exportPage);

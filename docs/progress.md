@@ -4,19 +4,9 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7h — e2e journeys and scale tests (in progress)
-- **Last green checkpoint:** Phase 7g — export
-- **7h status:** journeys written in `e2e/tests/` (support.ts helpers:
-  newUser via console-log code, createCascade, apiCascade, playLevel, idb,
-  outboxCount): rules ✅, two-devices ✅, touch ✅, player ✅, pages ✅,
-  shell ✅; being fixed: accounts, admin, controls, misc, plane, segments,
-  typed, tabs, journeys. Configured passes (`@env` tags, own stacks via
-  E2E_PROJECT/E2E_PORT/E2E_ENV in the Makefile): `@ttl` (PQ-016), `@purge`,
-  `@limits` in `env.spec.ts` — not yet run. Not yet written: updating the app
-  (second build, MIN_APP_VERSION), the 10,001-entry preview pause, the answer
-  limit / ROW_STORAGE_BUDGET journeys (need lowered client constants), export
-  with the backend stopped mid-download, CSP meta-policy checks. Scale tests
-  (`scripts/scale.py`) still a placeholder.
+- **Phase:** 8 — Production, prepared up to the steps that need credentials
+  (see "Phase 8 — what needs the user" below).
+- **Last green checkpoint:** Phase 7h — e2e journeys and scale tests.
 
 ## Environment notes (this machine)
 
@@ -386,20 +376,74 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 - Tests: Rust fixture test; `tests/export.rs` (7); Vitest fixtures (329) +
   `local.test.ts` (5); e2e downloads (local and server paths).
 
+### Phase 7h — End-to-end journeys and scale tests ✅
+- `e2e/tests/`: every journey in PLAN.md § End-to-end tests, one spec per
+  area (rules, plane, two-devices, accounts, typed, segments, controls, touch,
+  admin, tabs, journeys, misc, builder-lists, update, shell), plus the
+  configured passes, each on its own stack through `E2E_PROJECT`/`E2E_PORT`:
+  `@ttl` (PQ-016), `@purge`, `@limits`, and `@answers` / `@budget` on a
+  frontend built with lowered storage limits (`WORDFALL_TEST_LIMITS` →
+  `__TEST_LIMITS__` in `lib/sync/config.ts`; a release build never sets it).
+  `make test-e2e` runs them all.
+- Server scale suite `backend/tests/scale.rs` (`#[ignore]`d; `make test-scale`
+  runs it in release mode against a throwaway Postgres, then the device's half):
+  measured here (budgets in the file):
+  | Test | Measured | Budget |
+  |---|---|---|
+  | 300,001-word lexicon upload / index build | 3.4 s / 2.7 s | 120 s |
+  | creation, 300,000 questions | 5.5 s | 20 s |
+  | download: 3 keys + 30 answer pages | 2.0 s | 60 s |
+  | push: 300,000 grades in 600 requests, default rate limit | 522 s (before the round-trip cut) | 600 s |
+  | pull: second device, 300,000 graded rows | 1.0 s | 60 s |
+  | finish (reset 300,000; 150,000-question Level 2) | 8.6 s | 20 s |
+  | ten concurrent exports with definitions | 7.5 s, peak RSS 2.4 GiB | 120 s, 8 GiB task |
+  | million-row leave upload | 10.8 s | 120 s |
+  | purge a trashed 300k cascade, three levels, padded 1M | 0.45 s | 30 s |
+  | 60,000 chains in 12 capped runs, sync answered each run | 0.3–1.8 s a run | 10 s |
+  | incremental pull beside 60,000 chains (EXPLAIN: user_seq indexes, 3 buffers) | < 1 ms | 0.5 s |
+- Device scale suites `frontend/src/lib/sync/*.scale.ts`
+  (`vitest.scale.config.ts`; fake-indexeddb against the in-memory server, which
+  was made incremental so it scales): see "Device scale suites" below for what
+  ran on this machine.
+- Fixes the journeys found: bindings saved as a snapshot (a state proxy can't
+  be cloned into IndexedDB); "Keep studying" dismissed in the controller; a
+  deleted account lands on the landing page (`session.toLanding`); "Synced"
+  only once the outbox is counted, and non-leader tabs recount it; a budget
+  drop overrides the automatic keep until the cascade is opened (it was being
+  refetched); admin "in use" explanations visible, not only a tooltip;
+  storage figures in KB below a megabyte; "(kept automatically)" keeps its
+  space; periodic service-worker update checks.
+
+### Phase 8 — Production (prepared) 
+- SES mailer (`MAIL_BACKEND=ses`, SES v2 API, task role); sqlx over TLS
+  (rustls) for RDS; Terraform: backups (second-region, versioned,
+  object-locked bucket; nightly Fargate dump on the backend image via
+  EventBridge Scheduler; read-only role URL in SSM), alarms (no dump 36 h,
+  dump 30% smaller, RDS free storage, `error` rejections) and the rejection
+  dashboard, ECS Exec, an OIDC deploy role; `make infra-validate` passes.
+- `scripts/backup.py`, `scripts/restore.py` (resync bump always; `--bump-only`
+  for PITR; `--replace` for local stacks) — tried on the dev and e2e stacks.
+- `.github/workflows/ci.yml` (make test on push, the seeding rerun at
+  `ADMIN_UPLOAD_RATE_PER_MINUTE=2`, make test-scale nightly) and
+  `deploy.yml` (manual: build/push, new task definition revisions, roll).
+- `docs/runbook.md`: one-time setup, deploying, granting admin, backups,
+  alarms, restoring, the drill.
+
 ## Next
 
-Phase 7 — Local-first player, split into sub-milestones, each committed at
-green: (done: 7a–7d) **7a** IndexedDB per-user stores (`meta` incl. device id — replace the
-temporary `lib/local/device.ts`), base/overlay/staging/outbox and
-`applyLocally` using `lib/cascade/sim.ts` rules; **7b** sync engine (push,
-paged pull, rebase, notices, resync); **7c** download manager (window,
-budget, keep offline, card/key pages, questions endpoint); **7d** service
-worker; **7e** player; **7f** cascades, trash and account pages (builder
-defaults from preferences, cascade-count warning); **7g** export; **7h** e2e
-journeys and scale tests. Re-read before 7a: User Experience (428–1030),
-Offline and Sync (1965–2995, esp. On the device 1991–2364), Cascades
-(1817–1964), Frontend (4271–4415), API → Cascades and sync (4166–4253),
-frontend unit tests (5000–5298).
+Phase 8 — what needs the user (nothing below can be done without credentials,
+an AWS account, DNS or licensed data):
+1. AWS account and admin credentials; Terraform state bucket; the first
+   `terraform apply` (docs/runbook.md § One-time setup).
+2. DNS: ACM validation records, SES DKIM records, the site alias.
+3. SES production access (out of the sandbox).
+4. Database roles and the three SSM values (DATABASE_URL with
+   `sslmode=require`, BACKUP_DATABASE_URL, SESSION_SIGNING_KEY).
+5. GitHub: the `production` environment and the `AWS_REGION` /
+   `AWS_DEPLOY_ROLE_ARN` variables; then the first Deploy run.
+6. First catalog upload at /admin from the licensed files (checking the
+   index total against the task memory), and granting the first admin.
+7. The first restore drill, recorded in the runbook.
 
 ## Open PQs
 
@@ -418,6 +462,9 @@ frontend unit tests (5000–5298).
 - PQ-013 (finish/finish_segment check order) — provisional.
 - PQ-014 (singular "1 answer … wasn't kept") — provisional.
 - PQ-015 (cascade limit as a client constant) — provisional.
+- PQ-016 (expired-session journey TTL 20 s, not 2 s) — provisional.
+- PQ-017 (forty-cascade drop pass; ROW_BYTES 150; "only the kept one") — provisional.
+- PQ-018 (answer-limit journey vs "never its cards") — provisional.
 
 ## Known failing tests
 

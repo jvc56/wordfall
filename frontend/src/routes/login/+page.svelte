@@ -7,6 +7,7 @@
 	import { ApiError } from '$lib/api';
 	import { login } from '$lib/auth/session.svelte';
 	import { describe } from '$lib/auth/errors';
+	import { syncNow } from '$lib/sync/runtime.svelte';
 
 	let username = $state('');
 	let password = $state('');
@@ -19,6 +20,10 @@
 		error = null;
 		try {
 			await login(username, password);
+			// "Right after logging in" is a sync trigger (PLAN.md § When the device
+			// syncs). Logging back in as the same account after a 401 starts no new
+			// engine, so ask the running one; a new account's engine syncs as it starts.
+			void syncNow().catch(() => undefined);
 			await goto('/cascades');
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 401) error = 'Wrong username or password.';

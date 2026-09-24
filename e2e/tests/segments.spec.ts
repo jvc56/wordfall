@@ -62,6 +62,8 @@ test('segments and progression', async ({ page }) => {
 	await page.getByRole('button', { name: 'Quiz options' }).click();
 	await page.getByRole('dialog', { name: 'Quiz options' }).getByRole('radio', { name: /^Drill/ }).check();
 	await page.getByRole('button', { name: 'Save' }).click();
+	// Written once the entry's options summary says so.
+	await expect(page.getByText(/· drill/).first()).toBeVisible();
 	await page.goto(player);
 	d = await settings(page);
 	await expect(d.getByRole('radio', { name: /^Drill/ })).not.toBeChecked();

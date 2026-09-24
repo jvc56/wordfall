@@ -17,8 +17,9 @@ function stackUp(env: string[]) {
 	execFileSync('python3', [path.join(root, 'scripts/stack.py'), 'up', '--project', PROJECT, '--port', String(PORT), '--no-build', ...env.flatMap((e) => ['--env', e])], { stdio: 'inherit' });
 }
 
+/** The build the page runs; NaN while a reload is under way (the poll then tries again). */
 async function build(page: Page) {
-	return Number(await page.evaluate(() => document.documentElement.dataset.build));
+	return Number(await page.evaluate(() => document.documentElement.dataset.build).catch(() => NaN));
 }
 
 test('updating the app', async ({ context }) => {

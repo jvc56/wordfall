@@ -164,12 +164,20 @@ export async function progress(page: Page): Promise<[number, number]> {
  * when `miss(i)` says so; returns the banner.
  */
 export async function playLevel(page: Page, miss: (i: number) => boolean): Promise<string> {
-	// Let the level the last finish led to render before reading it.
+	// Let the level the last finish led to render before reading it, and,
+	// online, let the finish sync: its rebase refreshes the player, and a press
+	// that lands in that refresh is lost.
 	await page.waitForTimeout(400);
+	if (await page.evaluate(() => navigator.onLine)) {
+		await expect(page.getByText('Synced', { exact: true })).toBeVisible({ timeout: 15_000 }).catch(() => undefined);
+	}
 	const [pos, count] = await progress(page);
 	const banner = page.getByRole('status').filter({ hasText: /^(Level \d|Run \d)/ }).first();
 	for (let i = pos - 1; i < count; i++) {
 		await expect(page.getByText(new RegExp(`^${i + 1} / ${count}$`)).first()).toBeVisible({ timeout: 15_000 });
+		// The card is ready once it shows unrevealed: the progress can change a
+		// moment before, and a press in that moment is dropped.
+		await expect(page.getByText(/✓ Correct|✗ Missed/)).toHaveCount(0, { timeout: 15_000 });
 		await press(page, 'Space');
 		await expect(page.getByText(/✓ Correct|✗ Missed/)).toBeVisible();
 		if (miss(i - (pos - 1))) await press(page, 'KeyX');
@@ -179,5 +187,10 @@ export async function playLevel(page: Page, miss: (i: number) => boolean): Promi
 		if (await banner.isVisible()) break;
 	}
 	await expect(banner).toBeVisible({ timeout: 15_000 });
-	return (await banner.textContent())!.trim();
+	const text = (await banner.textContent())!.trim();
+	// The level the finish led to renders after the banner: wait for the last
+	// card's progress to go, so the next call reads the new level's.
+	const [now] = await progress(page);
+	await expect(page.getByText(new RegExp(`^${now} / ${count}$`))).toHaveCount(0, { timeout: 5_000 }).catch(() => undefined);
+	return text;
 }

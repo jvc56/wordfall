@@ -54,10 +54,13 @@ test('@env @purge a cleared quiz is purged and the tombstone removes it from a s
 	await login(p2, username);
 	await p2.goto(player);
 	await expect(p2.getByText('1 / 18')).toBeVisible({ timeout: 30_000 });
-	expect(await playLevel(page, (i) => i < 2)).toMatch(/^Level 1/);
-	expect(await playLevel(page, () => false)).toMatch(/^Level 2 cleared/);
+	// The second browser clears the quiz itself, so it holds the cleared quiz
+	// before the purge can run: with a retention of 0 days the purge follows
+	// within seconds, sooner than another browser's next pull would bring it.
+	expect(await playLevel(p2, (i) => i < 2)).toMatch(/^Level 1/);
+	expect(await playLevel(p2, () => false)).toMatch(/^Level 2 cleared/);
 	await p2.goto('/trash');
-	await expect(p2.getByText(/Purged/)).toBeVisible({ timeout: 60_000 });
+	await expect(p2.getByText(/Purged/).first()).toBeVisible({ timeout: 60_000 });
 	// The purge task takes it, and the next pull's tombstone removes it.
 	await expect
 		.poll(

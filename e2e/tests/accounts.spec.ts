@@ -59,6 +59,8 @@ test('logging out, online and offline, and a second account on the same browser'
 	await expect(page.getByText(/^\d+ \/ \d+$/).first()).toBeVisible({ timeout: 20_000 });
 	await press(page, 'Space');
 	await press(page, 'Space');
+	// The grade and the cursor move are written once the next card shows.
+	await expect(page.getByText(/^2 \/ \d+$/).first()).toBeVisible();
 	await page.goto('/account');
 	await expect(page.getByText('2 changes haven’t synced yet. They will sync the next time you log in on this device.')).toBeVisible();
 	await context.setOffline(false);
