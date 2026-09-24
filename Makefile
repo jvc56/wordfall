@@ -75,7 +75,7 @@ test-scale: frontend-deps
 	cd backend
 	DATABASE_URL=postgres://postgres:wordfall@127.0.0.1:$$port/postgres \
 	  cargo test --release --test scale -- --ignored --test-threads=1 --nocapture
-	cd ../frontend && npx vitest run --config vitest.scale.config.ts
+	cd ../frontend && npx playwright install chromium >/dev/null && npx vitest run --config vitest.scale.config.ts
 
 ## Zyzzyva comparison; skipped with a notice unless the licensed files are present.
 test-parity:

@@ -47,19 +47,25 @@ test('over the answer limit with two automatic keeps @env @answers', async ({ pa
 		await navigator.serviceWorker.ready;
 	});
 
-	// Offline: "answers need a connection", not a bar at nothing; the question still plays.
+	// Offline: "answers need a connection", not a bar at nothing.
 	await context.setOffline(true);
 	await page.goto('/cascades');
 	await expect(entry(page, 'Answers A').getByText('Answers need a connection')).toBeVisible();
-	await entry(page, 'Answers A').getByRole('link', { name: 'Answers A' }).click();
-	await expect(page.getByText('1 / 83')).toBeVisible({ timeout: 30_000 });
-	await page.keyboard.press('Space');
-	await expect(page.getByText('Answer needs a connection.')).toBeVisible();
 
 	// Back online: progress again.
 	await context.setOffline(false);
 	await page.goto('/cascades');
 	await expect(entry(page, 'Answers A').getByText(/^Downloading \d+%$/)).toBeVisible({ timeout: 60_000 });
+
+	// Its questions still show in the player, the answer needing a connection.
+	// Last, and offline: opening it makes it the most recently opened, and the
+	// limit would then take the other cascade's answers instead.
+	await context.setOffline(true);
+	await entry(page, 'Answers A').getByRole('link', { name: 'Answers A' }).click();
+	await expect(page.getByText('1 / 83')).toBeVisible({ timeout: 30_000 });
+	await page.keyboard.press('Space');
+	await expect(page.getByText('Answer needs a connection.')).toBeVisible();
+	await context.setOffline(false);
 });
 
 test('over ROW_STORAGE_BUDGET: unkept first, then the automatic keeps, never the user’s; drops stay dropped @env @budget', async ({ page, context }) => {

@@ -397,13 +397,14 @@ describe('the per-user database', () => {
 			const name = userDbName(USER);
 			// The fixture: the schema as of version v, holding an outbox and an overlay.
 			const old = await openDB(name, v, {
-				upgrade(db, oldVersion) {
-					for (let i = oldVersion; i < v; i++) MIGRATIONS[i](db as never);
+				upgrade(db, oldVersion, _newVersion, tx) {
+					for (let i = oldVersion; i < v; i++) MIGRATIONS[i](db as never, tx as never);
 				}
 			});
 			const q = { id: 'q1', cascade_id: 'c1', status: 'active' } as unknown as QuizRow;
 			const row = { quiz_id: 'q1', question_idx: 3, cascade_id: 'c1', position: 0, grade: 'missed', graded_at: 't', seq: 0 };
-			const entry = { device_seq: 7, cascade_id: 'c1', op: { id: 'o', device_seq: 7, seen_seq: 0, at: 't', type: 'grade' } };
+			const op = { id: 'o', device_seq: 7, seen_seq: 0, at: 't', type: 'grade', quiz_id: 'q1', question_idx: 3 };
+			const entry = { device_seq: 7, cascade_id: 'c1', op };
 			await old.put('overlay_quizzes', q);
 			await old.put('overlay_quiz_questions', row as QuestionRow);
 			await old.put('outbox', entry);
@@ -412,7 +413,9 @@ describe('the per-user database', () => {
 			expect(db.version).toBe(USER_DB_VERSION);
 			expect(await db.get('overlay_quizzes', 'q1')).toEqual(q);
 			expect(await db.get('overlay_quiz_questions', ['q1', 3])).toEqual(row);
-			expect(await db.getAll('outbox')).toEqual([entry]);
+			// Version 2 indexes what each queued operation touches, and gives the entries already queued theirs.
+			expect(await db.getAll('outbox')).toEqual([v < 2 ? { ...entry, touches: ['q:q1', 'qq:q1:3'] } : entry]);
+			expect(await db.countFromIndex('outbox', 'touches', 'qq:q1:3')).toBe(v < 2 ? 1 : 0);
 			db.close();
 		}
 	});

@@ -9,7 +9,8 @@ import { Rejected } from '$lib/cascade/rules';
 import { applyOp } from '$lib/local/apply';
 import { BASE, OVERLAY, STAGING, type StoreName, type UserDb } from '$lib/local/db';
 import { readMeta, writeMeta } from '$lib/local/meta';
-import type { OutboxEntry, QuestionRow, QuizRow } from '$lib/local/rows';
+import { deleteCascadeKeyed, deleteListed, deleteQuizKeyed, prefixRange } from '$lib/local/ranges';
+import { CREATING, type OutboxEntry, type QuestionRow, type QuizRow } from '$lib/local/rows';
 import type { RwTx } from '$lib/local/view';
 import { noticesFor, type Notice, type Settled } from './notices';
 import type { SyncResult } from './protocol';
@@ -30,18 +31,20 @@ export interface RebaseOutcome {
 
 const REBASE_STORES: StoreName[] = [...BASE, ...STAGING, ...OVERLAY, 'outbox', 'meta', 'questions', 'cards'];
 
-/** Operations that create, reset or restore a quiz: never on the fast path. */
-const CREATING = new Set(['finish', 'finish_segment', 'restore_quiz']);
+/**
+ * Operations whose overlay rows are only their own quiz row, question row and
+ * cascade row, so the fast path can clear by key (`clearTouched`); any other
+ * acknowledged type falls back to reading the cascade's whole overlay.
+ */
+const KEYED = new Set(['grade', 'move_cursor', 'set_quiz_options']);
 
 // ---------------------------------------------------------------------------
 // Deletions
 // ---------------------------------------------------------------------------
 
 async function deleteQuizRows(tx: RwTx, quizId: string) {
-	for (const store of ['quiz_questions', 'quiz_attempts'] as const) {
-		const s = tx.objectStore(store);
-		for (const k of await s.index('quiz_id').getAllKeys(quizId)) await s.delete(k);
-	}
+	await tx.objectStore('quiz_questions').delete(prefixRange(quizId));
+	await tx.objectStore('quiz_attempts').delete(prefixRange(quizId));
 }
 
 /**
@@ -51,10 +54,11 @@ async function deleteQuizRows(tx: RwTx, quizId: string) {
  */
 export async function deleteCascadeHere(tx: RwTx, cascadeId: string) {
 	await tx.objectStore('cascades').delete(cascadeId);
-	for (const store of ['quizzes', 'quiz_questions', 'quiz_attempts', 'questions', 'cards'] as const) {
-		const s = tx.objectStore(store);
-		for (const k of await s.index('cascade_id').getAllKeys(cascadeId)) await s.delete(k as never);
-	}
+	await deleteQuizKeyed(tx.objectStore('quiz_questions'), cascadeId);
+	await deleteQuizKeyed(tx.objectStore('quiz_attempts'), cascadeId);
+	await deleteListed(tx.objectStore('quizzes'), cascadeId);
+	await deleteCascadeKeyed(tx.objectStore('questions'), cascadeId);
+	await deleteCascadeKeyed(tx.objectStore('cards'), cascadeId);
 	const opens = await readMeta(tx, 'opens');
 	if (cascadeId in opens) {
 		delete opens[cascadeId];
@@ -77,10 +81,47 @@ export async function deleteCascadeHere(tx: RwTx, cascadeId: string) {
 	}
 }
 
+/**
+ * The fast path's clearing, asked of the outbox's `touches` index key by key:
+ * the cascade row goes when nothing of the cascade is pending; a quiz row, its
+ * attempts and a question row the acknowledged operations touched go unless a
+ * pending operation touches them too, or creates or resets the quiz whole.
+ */
+async function clearTouched(tx: RwTx, C: string, acked: Acked[], pendingHere: boolean) {
+	const touches = tx.objectStore('outbox').index('touches');
+	// Whether any pending operation holds the key: the first match, not a count,
+	// which IndexedDB can only answer by walking the whole range.
+	const held = async (key: string) => (await touches.getKey(key)) !== undefined;
+	if (!pendingHere) await tx.objectStore('overlay_cascades').delete(C);
+	const whole = new Map<string, boolean>();
+	for (const quiz of new Set(acked.map((a) => a.entry.op.quiz_id as string).filter(Boolean))) {
+		const w = await held(`w:${quiz}`);
+		whole.set(quiz, w);
+		if (!(await held(`q:${quiz}`))) await tx.objectStore('overlay_quizzes').delete(quiz);
+		if (!w) {
+			await tx.objectStore('overlay_quiz_attempts').delete(prefixRange(quiz));
+		}
+	}
+	// The question rows, asked and cleared together (IndexedDB pipelines them).
+	const oq = tx.objectStore('overlay_quiz_questions');
+	const grades = acked.map((a) => a.entry.op).filter((op) => op.type === 'grade' && !whole.get(op.quiz_id as string));
+	const stillHeld = await Promise.all(grades.map((op) => held(`qq:${op.quiz_id}:${op.question_idx}`)));
+	await Promise.all(grades.map((op, i) => (stillHeld[i] ? undefined : oq.delete([op.quiz_id as string, op.question_idx as number]))));
+}
+
 async function clearOverlay(tx: RwTx, cascadeId: string, keep?: (store: string, row: unknown) => boolean) {
 	const oc = tx.objectStore('overlay_cascades');
 	const row = await oc.get(cascadeId);
 	if (row && !keep?.('cascades', row)) await oc.delete(cascadeId);
+	if (!keep) {
+		// Everything goes: each quiz's question and attempt rows as one key range
+		// (a quiz is one cascade's), not a request per row — a level a finish
+		// created is 150,000 of them.
+		await deleteQuizKeyed(tx.objectStore('overlay_quiz_questions'), cascadeId);
+		await deleteQuizKeyed(tx.objectStore('overlay_quiz_attempts'), cascadeId);
+		await deleteListed(tx.objectStore('overlay_quizzes'), cascadeId);
+		return;
+	}
 	for (const store of ['overlay_quizzes', 'overlay_quiz_questions', 'overlay_quiz_attempts'] as const) {
 		const s = tx.objectStore(store);
 		let cursor = await s.index('cascade_id').openCursor(cascadeId);
@@ -154,7 +195,14 @@ export async function rebase(db: UserDb, st: PullState, acked: Acked[], ctx: Reb
 	// Step 1: drop every acknowledged operation, applied or rejected.
 	{
 		const tx = db.transaction(['outbox'], 'readwrite');
-		await Promise.all(acked.map((a) => tx.objectStore('outbox').delete(a.entry.device_seq)));
+		const outbox = tx.objectStore('outbox');
+		// A batch is the outbox's first entries, and device_seq only grows, so
+		// when the range from its first to its last holds exactly the acknowledged
+		// entries it goes in one request rather than one per entry.
+		const seqs = acked.map((a) => a.entry.device_seq);
+		const range = seqs.length ? IDBKeyRange.bound(Math.min(...seqs), Math.max(...seqs)) : null;
+		if (range && (await outbox.count(range)) === seqs.length) await outbox.delete(range);
+		else await Promise.all(seqs.map((k) => outbox.delete(k)));
 		await tx.done;
 	}
 
@@ -190,7 +238,12 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 	const S = st.seq;
 	const tx = db.transaction(REBASE_STORES, 'readwrite') as unknown as RwTx;
 	tx.done.catch(() => undefined);
-	const remaining = await tx.objectStore('outbox').index('cascade_id').getAll(C);
+	// What is still pending here is counted, and read in full only by the paths
+	// that need every entry: on the fast path the work stays proportional to
+	// the acknowledged batch, whatever an offline session left queued behind it.
+	const pendingHere = (await tx.objectStore('outbox').index('cascade_id').getKey(C)) !== undefined;
+	let remainingRows: OutboxEntry[] | null = null;
+	const remaining = async () => (remainingRows ??= await tx.objectStore('outbox').index('cascade_id').getAll(C));
 	const fast =
 		!st.full &&
 		!st.foreign.has(C) &&
@@ -217,7 +270,7 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 	// (§ The sync cycle → Pull, 3): never a cascade with pending operations, and
 	// never one a creation in flight wrote with a later sequence.
 	const baseCascade = await tx.objectStore('cascades').get(C);
-	if (st.full && !st.touched.has(C) && remaining.length === 0 && baseCascade && baseCascade.seq <= S) {
+	if (st.full && !st.touched.has(C) && !pendingHere && baseCascade && baseCascade.seq <= S) {
 		await deleteCascadeHere(tx, C);
 		gone = true;
 	}
@@ -234,16 +287,23 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 		for (const a of await tx.objectStore('staging_quiz_attempts').index('cascade_id').getAll(C)) {
 			await tx.objectStore('quiz_attempts').put(a);
 		}
-		if (st.full && st.touched.has(C) && remaining.length === 0) {
+		if (st.full && st.touched.has(C) && !pendingHere) {
 			for (const q of await tx.objectStore('quizzes').index('cascade_id').getAll(C)) {
 				if (q.seq < S) {
 					await tx.objectStore('quizzes').delete(q.id);
 					await deleteQuizRows(tx, q.id);
 				} else if (q.status === 'active' && st.qrf.has(C)) {
 					const qs = tx.objectStore('quiz_questions');
+					let removed = false;
 					for (const r of await qs.index('quiz_id').getAll(q.id)) {
-						if (r.grade !== null && r.seq < S) await qs.delete([r.quiz_id, r.question_idx]);
+						if (r.grade !== null && r.seq < S) {
+							await qs.delete([r.quiz_id, r.question_idx]);
+							removed = true;
+						}
 					}
+					// Its rows are no longer whole: pending, so the download manager
+					// fetches them back (and settleQuiz's witness stays honest).
+					if (removed) await tx.objectStore('quizzes').put({ ...q, pending: true });
 				}
 			}
 			const qa = tx.objectStore('quiz_attempts');
@@ -273,12 +333,16 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 		}
 	}
 
-	if (fast) {
+	if (fast && work.acked.every((a) => KEYED.has(a.entry.op.type))) {
+		// The fast path, by key: of the rows the acknowledged operations touched,
+		// delete those no pending operation still holds.
+		await clearTouched(tx, C, work.acked, pendingHere);
+	} else if (fast) {
 		// The fast path: delete the overlay rows no remaining operation touches.
 		const quizzes = new Set<string>();
 		const questions = new Set<string>();
 		const whole = new Set<string>();
-		for (const e of remaining) {
+		for (const e of await remaining()) {
 			const op = e.op;
 			if (op.quiz_id) quizzes.add(op.quiz_id as string);
 			if (op.new_quiz_id) {
@@ -290,7 +354,7 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 		}
 		await clearOverlay(tx, C, (store, row) => {
 			const r = row as { id?: string; quiz_id?: string; question_idx?: number };
-			if (store === 'cascades') return remaining.length > 0;
+			if (store === 'cascades') return pendingHere;
 			if (store === 'overlay_quizzes') return quizzes.has(r.id!);
 			if (store === 'overlay_quiz_attempts') return whole.has(r.quiz_id!);
 			return whole.has(r.quiz_id!) || questions.has(`${r.quiz_id}:${r.question_idx}`);
@@ -300,14 +364,13 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 		// operation created or reset, then delete the rest of the overlay.
 		const oq = tx.objectStore('overlay_quiz_questions');
 		for (const quizId of promote) {
-			for (const r of await oq.index('quiz_id').getAll(quizId)) {
-				await tx.objectStore('quiz_questions').put({ ...r, seq: S });
-			}
+			const qs = tx.objectStore('quiz_questions');
+			await Promise.all((await oq.index('quiz_id').getAll(quizId)).map((r) => qs.put({ ...r, seq: S })));
 		}
 		await clearOverlay(tx, C);
 		// Step 4: replay the outbox, in device_seq order, with the same rules.
 		const device = await readMeta(tx, 'device');
-		for (const e of remaining) {
+		for (const e of await remaining()) {
 			try {
 				await applyOp(tx, e.op, {
 					device_id: device.device_id,
@@ -322,11 +385,12 @@ async function rebaseCascade(db: UserDb, st: PullState, C: string, work: Cascade
 		}
 	}
 
-	// Staging rows of this cascade are done with.
-	for (const store of ['staging_quizzes', 'staging_quiz_attempts', 'staging_quiz_questions'] as const) {
-		const s = tx.objectStore(store);
-		for (const k of await s.index('cascade_id').getAllKeys(C)) await s.delete(k as never);
-	}
+	// Staging rows of this cascade are done with: question and attempt rows as
+	// one key range per quiz (a quiz is one cascade's), not a request per row —
+	// a pulled level can stage 300,000 of them.
+	await deleteQuizKeyed(tx.objectStore('staging_quiz_questions'), C);
+	await deleteQuizKeyed(tx.objectStore('staging_quiz_attempts'), C);
+	await deleteListed(tx.objectStore('staging_quizzes'), C);
 	await tx.objectStore('staging_cascades').delete(C);
 
 	const quizIds = new Set((await tx.objectStore('quizzes').index('cascade_id').getAllKeys(C)) as string[]);
@@ -396,11 +460,14 @@ async function settleQuiz(
 	}
 	const inQrf = st.qrf.has(C);
 	if (bq && !seedChanged && staged.length === 0) {
-		// The usual case, answered from counts: an unchanged attempt whose rows
-		// are all here with positions needs nothing, however large the quiz.
-		const total = await qs.index('quiz_id').count(pq.id);
-		const positioned = await qs.index('quiz_position').count(IDBKeyRange.bound([pq.id, -Infinity], [pq.id, Infinity]));
-		if (total === n && positioned === n) {
+		// The usual case: an unchanged attempt whose rows are all here with
+		// positions needs nothing, however large the quiz. Positions are written
+		// for a quiz's whole set in one transaction, and the one path that removes
+		// single rows marks the quiz pending, so the row at the last position is
+		// the whole set's witness — one key lookup, where counting the rows would
+		// walk all of them on every batch.
+		const last = n > 0 ? await qs.index('quiz_position').getKey([pq.id, n - 1]) : undefined;
+		if (n > 0 && last !== undefined) {
 			await base.put(mergeQuiz(pq, false));
 			return;
 		}
@@ -412,7 +479,7 @@ async function settleQuiz(
 
 	if (seedChanged) {
 		// A rebuild: rows reset, grades cleared, then the pulled grades on top.
-		for (const r of rows) await qs.delete([r.quiz_id, r.question_idx]);
+		await qs.delete(prefixRange(pq.id));
 		rows = idx
 			? idx.map((i) => ({ quiz_id: pq.id, question_idx: i, cascade_id: C, position: null, grade: null, graded_at: null, seq: S }))
 			: [];
@@ -439,12 +506,12 @@ async function settleQuiz(
 			rows = withPositions(rows, pq.shuffle_seed).map((r) => ({ ...r, seq: S }));
 			complete = true;
 		} else {
-			for (const r of rows) await qs.delete([r.quiz_id, r.question_idx]);
+			await qs.delete(prefixRange(pq.id));
 			rows = [];
 			out.needsIndexList.add(pq.id);
 		}
 	}
-	for (const r of rows) await qs.put(r);
+	await Promise.all(rows.map((r) => qs.put(r)));
 	if (!complete && inQrf) out.needsIndexList.add(pq.id);
 	const gradedHere = rows.filter((r) => r.grade !== null).length;
 	await base.put(mergeQuiz(pq, graded > 0 && gradedHere < graded));

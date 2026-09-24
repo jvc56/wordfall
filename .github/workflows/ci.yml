@@ -74,5 +74,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Chromium and its system libraries for the device's scale suites
+        run: cd frontend && npm ci && npx playwright install --with-deps chromium
       - name: make test-scale (the 300,000-question budgets)
         run: make test-scale

@@ -68,8 +68,15 @@ export interface Applied {
 	completion?: { levels: number; attempts: number };
 }
 
+const orders = new WeakMap<SimQuiz, { seed: bigint; questions: number[]; order: number[] }>();
+
+/** The quiz's order for its current seed; remembered, since every `finish_segment` asks for it. Not to be mutated. */
 export function positionsOf(q: SimQuiz): number[] {
-	return shuffle(q.questions, q.state.seed);
+	const o = orders.get(q);
+	if (o && o.seed === q.state.seed && o.questions === q.questions) return o.order;
+	const order = shuffle(q.questions, q.state.seed);
+	orders.set(q, { seed: q.state.seed, questions: q.questions, order });
+	return order;
 }
 
 function correct(q: SimQuiz) {

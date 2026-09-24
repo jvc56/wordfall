@@ -2,16 +2,22 @@
 // takes 30 card-page requests in all, a tenth of the 300 their answers need,
 // and that the bytes it moves are within a quarter of those ten cascades'
 // answers rather than a tenth, the ratio Downloads states."
+//
+// Three such cascades rather than ten (PQ-019): the ratios are per cascade and
+// need the full 300,000 questions (a smaller cascade fits its keys in one page
+// against several of answers), while ten cost six million IndexedDB writes
+// before the pass is done — a quarter of an hour. Three give 9 requests against
+// the answers' 90, the same tenth.
 import { describe, expect, it } from 'vitest';
 import { CARDS_PAGE } from './downloads';
 import { FakeServer } from './testing/fake-server';
 import { ids, QUESTIONS, report, ScaleDev, timed } from './testing/scale';
 
-const CASCADES = 10;
-const KEYS_PASS_BUDGET_MS = 1_200_000;
+const CASCADES = 3;
+const KEYS_PASS_BUDGET_MS = 600_000;
 
-describe('the keys-only pass for ten 300,000-question cascades', () => {
-	it('takes 30 requests, a tenth of the answers’ 300, moving under a quarter of their bytes', async () => {
+describe('the keys-only pass for three 300,000-question cascades (PQ-019)', () => {
+	it('takes 3 requests a cascade, a tenth of the answers’ 30, moving under a quarter of their bytes', async () => {
 		const server = new FakeServer();
 		const d = await ScaleDev.make(server);
 		const all = Array.from({ length: CASCADES }, (_, i) => ids(i + 1));
@@ -36,13 +42,13 @@ describe('the keys-only pass for ten 300,000-question cascades', () => {
 			}
 		}
 		report(
-			'keys-only pass, ten cascades',
+			`keys-only pass, ${CASCADES} cascades`,
 			ms,
 			KEYS_PASS_BUDGET_MS,
 			`${keys.length} requests, ${(keyBytes / 1e6).toFixed(1)} MB; the answers: ${answerPages} requests, ${(answerBytes / 1e6).toFixed(1)} MB; ratio ${(keyBytes / answerBytes).toFixed(3)}`
 		);
-		expect(keys.length).toBe(30);
-		expect(answerPages).toBe(300);
+		expect(keys.length).toBe(3 * CASCADES);
+		expect(answerPages).toBe(30 * CASCADES);
 		expect(keyBytes).toBeLessThanOrEqual(answerBytes / 4);
 		expect(ms).toBeLessThanOrEqual(KEYS_PASS_BUDGET_MS);
 	});

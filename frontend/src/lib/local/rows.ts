@@ -154,6 +154,8 @@ export interface OutboxEntry {
 	cascade_id?: string;
 	/** Set on a `move_cursor` only, so a newer one finds the pending one. */
 	cursor_quiz?: string;
+	/** What it touches (`touchesOf`), indexed so the rebase's fast path can ask by key. */
+	touches?: string[];
 	op: WireOp;
 	/** What the device computed, for the notices (never sent). */
 	local?: {
@@ -212,4 +214,27 @@ export function preferencesFromWire(w: Wire): PreferencesRow {
 		meta: b.meta
 	})) as Binding[];
 	return { ...(w as unknown as PreferencesRow), updated_seq: num(w.updated_seq), bindings };
+}
+
+/** Operations that create, reset or restore a quiz: never on the rebase's fast path. */
+export const CREATING = new Set(['finish', 'finish_segment', 'restore_quiz']);
+
+/**
+ * What a pending operation touches, as keys of the outbox's `touches` index:
+ * `q:<quiz>` for a quiz row it changes, `w:<quiz>` for a quiz it creates or
+ * resets whole, `qq:<quiz>:<idx>` for a question row it grades. The rebase's
+ * fast path asks the index whether anything still pending holds a row the
+ * acknowledged operations touched, rather than reading every pending
+ * operation of the cascade (PLAN.md § The sync cycle: each acknowledgement's
+ * work proportional to its own batch).
+ */
+export function touchesOf(op: WireOp): string[] {
+	const t: string[] = [];
+	const quiz = op.quiz_id as string | undefined;
+	const created = op.new_quiz_id as string | undefined;
+	if (quiz) t.push(`q:${quiz}`);
+	if (created) t.push(`q:${created}`, `w:${created}`);
+	if (quiz && CREATING.has(op.type)) t.push(`w:${quiz}`);
+	if (op.type === 'grade') t.push(`qq:${quiz}:${op.question_idx}`);
+	return t;
 }

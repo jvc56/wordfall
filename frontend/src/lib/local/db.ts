@@ -2,7 +2,7 @@
 // user id, opened only for the signed-in account, upgraded by versioned
 // migrations. A tab still on an old build closes its connection on
 // `versionchange`, so the new build's upgrade is never blocked.
-import { openDB, type DBSchema, type IDBPDatabase, type StoreNames } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreNames } from 'idb';
 import { userDbName } from './accounts';
 import type {
 	AttemptRow,
@@ -15,6 +15,7 @@ import type {
 	QuestionRow,
 	QuizRow
 } from './rows';
+import { touchesOf } from './rows';
 
 type QuestionKeyPath = [string, number];
 
@@ -47,7 +48,7 @@ export interface UserSchema extends DBSchema {
 	staging_quiz_attempts: RowStores['quiz_attempts'];
 	questions: { key: QuestionKeyPath; value: QuestionKey; indexes: { cascade_id: string } };
 	cards: { key: QuestionKeyPath; value: CardRow; indexes: { cascade_id: string } };
-	outbox: { key: number; value: OutboxEntry; indexes: { cascade_id: string; cursor_quiz: string } };
+	outbox: { key: number; value: OutboxEntry; indexes: { cascade_id: string; cursor_quiz: string; touches: string } };
 }
 
 export type UserDb = IDBPDatabase<UserSchema>;
@@ -72,8 +73,8 @@ function rowStores(db: IDBPDatabase<UserSchema>, [c, q, qq, qa]: readonly [strin
 	attempts.createIndex('cascade_id', 'cascade_id');
 }
 
-/** Versioned migrations; index i upgrades from version i to i + 1. */
-export const MIGRATIONS: Array<(db: IDBPDatabase<UserSchema>) => void> = [
+/** Versioned migrations; index i upgrades from version i to i + 1, inside the upgrade transaction. */
+export const MIGRATIONS: Array<(db: IDBPDatabase<UserSchema>, tx: IDBPTransaction<UserSchema, StoreName[], 'versionchange'>) => void> = [
 	(db) => {
 		db.createObjectStore('meta');
 		db.createObjectStore('preferences');
@@ -86,6 +87,19 @@ export const MIGRATIONS: Array<(db: IDBPDatabase<UserSchema>) => void> = [
 		const outbox = db.createObjectStore('outbox', { keyPath: 'device_seq' });
 		outbox.createIndex('cascade_id', 'cascade_id');
 		outbox.createIndex('cursor_quiz', 'cursor_quiz');
+	},
+	// 2: what each pending operation touches, for the rebase's fast path; the
+	// entries already queued are given theirs.
+	(_db, tx) => {
+		const outbox = tx.objectStore('outbox');
+		outbox.createIndex('touches', 'touches', { multiEntry: true });
+		void (async () => {
+			let cursor = await outbox.openCursor();
+			while (cursor) {
+				await cursor.update({ ...cursor.value, touches: touchesOf(cursor.value.op) });
+				cursor = await cursor.continue();
+			}
+		})();
 	}
 ];
 export const USER_DB_VERSION = MIGRATIONS.length;
@@ -98,8 +112,8 @@ export const USER_DB_VERSION = MIGRATIONS.length;
  */
 export async function openUserDb(userId: string, onVersionChange?: () => void): Promise<UserDb> {
 	const db = await openDB<UserSchema>(userDbName(userId), USER_DB_VERSION, {
-		upgrade(db, oldVersion) {
-			for (let v = oldVersion; v < USER_DB_VERSION; v++) MIGRATIONS[v](db);
+		upgrade(db, oldVersion, _newVersion, transaction) {
+			for (let v = oldVersion; v < USER_DB_VERSION; v++) MIGRATIONS[v](db, transaction);
 		}
 	});
 	db.addEventListener('versionchange', () => {

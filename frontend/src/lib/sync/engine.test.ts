@@ -200,6 +200,48 @@ describe('the sync engine', () => {
 		expect(await a.db.count('overlay_quiz_questions')).toBe(5);
 	});
 
+	// PLAN.md § The sync cycle: "the rebase's fast path … keeps each
+	// acknowledgement's work proportional to its own batch".
+	it('acknowledging a batch reads none of the cascade’s other pending operations or overlay rows', async () => {
+		const { a } = await setup({ count: 20 });
+		await a.play(Q1, 'CCCCCCCCCCMMMMMMMMMM');
+		const scans: string[] = [];
+		const proto = (globalThis as unknown as { IDBIndex: { prototype: Record<string, (...x: unknown[]) => unknown> } }).IDBIndex.prototype;
+		const saved: Record<string, (...x: unknown[]) => unknown> = {};
+		for (const m of ['getAll', 'getAllKeys', 'openCursor', 'openKeyCursor']) {
+			saved[m] = proto[m];
+			proto[m] = function (this: IDBIndex, ...x: unknown[]) {
+				const store = this.objectStore.name;
+				if (this.name === 'cascade_id' && (store === 'outbox' || store.startsWith('overlay_'))) scans.push(`${store}.${m}`);
+				return saved[m].apply(this, x);
+			};
+		}
+		try {
+			a.tamper = (req, send) => send({ ...req, ops: req.ops!.slice(0, 5) });
+			await a.sync();
+		} finally {
+			for (const m of Object.keys(saved)) proto[m] = saved[m];
+			a.tamper = null;
+		}
+		expect(scans).toEqual([]);
+		expect(await a.db.count('outbox')).toBe(15);
+		expect(await a.db.count('overlay_quiz_questions')).toBe(15);
+		expect(await a.db.get('overlay_quizzes', Q1)).toBeDefined();
+	});
+
+	it('the fast path keeps a question’s overlay row while a later grade of it is still queued', async () => {
+		const { a } = await setup({ count: 5 });
+		await a.play(Q1, 'C');
+		// Previous, then the same card graded missed: two grades of one question.
+		await a.play(Q1, 'M');
+		a.tamper = (req, send) => send({ ...req, ops: req.ops!.slice(0, 1) });
+		await a.sync();
+		a.tamper = null;
+		expect(await a.db.count('outbox')).toBe(1);
+		const rows = await a.rows(Q1);
+		expect(rows.filter((r) => r.grade !== null).map((r) => r.grade)).toEqual(['missed']);
+	});
+
 	it('an acknowledged offline finish leaves its new level playable with no index-list fetch', async () => {
 		const { a } = await setup();
 		await a.play(Q1, 'CCCMM');

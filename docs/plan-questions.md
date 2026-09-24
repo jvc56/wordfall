@@ -267,3 +267,41 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   after the next pass while its keys stay. Its question still shows in the
   player, it reads "Answers need a connection" offline, and it shows download
   progress again online.
+
+## PQ-019 — Device scale cases too large to run in minutes (open)
+
+- **Plan:** Scale tests (5930–5985):
+  - After opening ten 300,000-question cascades, the sync of about 3.75
+    million graded rows "finishes in under 120 seconds on the CI runner".
+  - The drop pass runs on "forty such cascades", with the heavy one also
+    holding "five cleared 150,000-question levels".
+- **Issue:** The device's budgets are about IndexedDB, and Chromium's
+  IndexedDB wrote about 7,500 indexed rows a second on the development
+  machine, however the writes were batched. At that rate:
+  - 3.75 million graded rows take about eight minutes just to write once,
+    against the 120 s budget, which implies about 31,000 rows a second.
+  - Forty 300,000-question cascades are about 24 million writes (rows and
+    keys) before the pass even starts, most of an hour.
+
+  Each full-size run therefore takes from twenty minutes to over an hour.
+  The user has asked that no test take that long.
+- **Provisional choice:** Both cases run at a tenth of their rows, with
+  budgets and limits scaled by the same tenth. Everything else in the device
+  suites runs at the plan's size.
+  - First sync (`frontend/src/lib/sync/scale-first-sync.scale.ts`): ten
+    cascades, as the plan says. One of them is played as the plan describes:
+    375,000 graded rows in 8 pages, against 12 s.
+  - Drop pass (`frontend/src/lib/sync/scale-drop.scale.ts`): forty
+    30,000-question cascades, the heavy one with five cleared 15,000-question
+    levels. `ROW_STORAGE_BUDGET` and `AUTO_KEEP_OFFLINE_ROWS` are mocked to a
+    tenth for that file.
+
+  - Keys-only pass (`frontend/src/lib/sync/scale-keys.scale.ts`): three
+    300,000-question cascades rather than ten. The ratios are per cascade and
+    need the full size, since a smaller cascade fits its keys in one page
+    against several of answers. Ten cascades cost six million writes before
+    the pass finishes, about a quarter of an hour. Three give 9 requests
+    against 90, the same tenth.
+
+  Whether 120 s for 3.75 million rows is reachable on real devices is itself
+  open: it implies about four times the write rate measured here.

@@ -196,7 +196,8 @@ export class SyncEngine {
 			await this.hooks.onSynced?.(o);
 			cursor = st.seq;
 			// While the outbox still holds more than was just sent, go again at once.
-			if ((await this.db.count('outbox')) === 0 || batch.length < BATCH_OPS) break;
+			// Anything left, asked as a first key: a count would walk the whole outbox every batch.
+			if ((await this.db.getKey('outbox', IDBKeyRange.lowerBound(-Infinity))) === undefined || batch.length < BATCH_OPS) break;
 		}
 		this.setStatus('idle');
 	}

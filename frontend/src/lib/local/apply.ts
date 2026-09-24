@@ -30,6 +30,7 @@ import {
 import type { StoreName, UserDb } from './db';
 import { readMeta, recordOpen, writeMeta } from './meta';
 import type { AttemptRow, CascadeRow, OutboxEntry, QuestionRow, QuizRow, WireOp } from './rows';
+import { touchesOf } from './rows';
 import * as view from './view';
 import type { RwTx } from './view';
 
@@ -547,7 +548,7 @@ export async function applyLocally(db: UserDb, fields: NewOp, clock: () => Date 
 			at: now
 		};
 		const result = await applyOp(tx, op, { device_id: device.device_id, now, max_quiz_questions: server.max_quiz_questions });
-		const entry: OutboxEntry = { device_seq: op.device_seq, op };
+		const entry: OutboxEntry = { device_seq: op.device_seq, op, touches: touchesOf(op) };
 		if (result.cascade_id) entry.cascade_id = result.cascade_id;
 		const { level, outcome, new_quiz_question_count, new_quiz_questions_hash } = result;
 		if (level !== undefined) entry.local = { level, outcome, new_quiz_question_count, new_quiz_questions_hash };

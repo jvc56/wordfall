@@ -105,19 +105,25 @@ export async function writePage(db: UserDb, st: PullState, changes: Changes) {
 		const unchanged = base && (!pulled || (pulled.attempt === base.attempt && pulled.shuffle_seed === base.shuffle_seed));
 		const direct = !base || unchanged;
 		const store = direct ? tx.objectStore('quiz_questions') : tx.objectStore('staging_quiz_questions');
-		for (let i = 0; i < g.question_idx.length; i++) {
-			const idx = g.question_idx[i];
-			const existing: QuestionRow | undefined = direct ? await store.get([g.quiz_id, idx]) : undefined;
-			await store.put({
-				quiz_id: g.quiz_id,
-				question_idx: idx,
-				cascade_id: cascade,
-				position: existing?.position ?? null,
-				grade: g.grade[i],
-				graded_at: g.graded_at[i],
-				seq: S
-			});
-		}
+		// Every row's read, then every write, issued together: IndexedDB pipelines
+		// requests within a transaction, where awaiting each in turn pays a round
+		// trip per row.
+		const existing: (QuestionRow | undefined)[] = direct
+			? await Promise.all(g.question_idx.map((idx) => store.get([g.quiz_id, idx])))
+			: [];
+		await Promise.all(
+			g.question_idx.map((idx, i) =>
+				store.put({
+					quiz_id: g.quiz_id,
+					question_idx: idx,
+					cascade_id: cascade,
+					position: existing[i]?.position ?? null,
+					grade: g.grade[i],
+					graded_at: g.graded_at[i],
+					seq: S
+				})
+			)
+		);
 	}
 	if (changes.preferences) st.preferences = preferencesFromWire(changes.preferences);
 	for (const t of changes.tombstones) {

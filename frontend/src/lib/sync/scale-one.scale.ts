@@ -7,26 +7,24 @@
 // within a small multiple of the operation count), and assert the IndexedDB
 // row count of one copy plus a small overlay once the outbox has drained,
 // recording the bytes of the rows, the question keys and the answers
-// separately, with the keys near 3 MB." The server's half is backend/tests/scale.rs.
+// separately, with the keys near 3 MB." The server's half is backend/tests/scale.rs,
+// which also times the pull; the device's pull at scale is scale-first-sync.
 import { describe, expect, it } from 'vitest';
 import { storeCreated } from '$lib/local/created';
 import { OVERLAY } from '$lib/local/db';
 import { FakeServer } from './testing/fake-server';
 import { ids, QUESTIONS, report, ScaleDev, timed, writes } from './testing/scale';
 
-// Budgets for disk-backed Chromium IndexedDB, which writes about 5,000–15,000
-// indexed rows a second on the development machine (creation measured 18–73 s
-// across runs): generous enough for a CI runner, tight enough to catch a
-// regression by an order of magnitude (a transaction per row, say).
-/** 300,000 Source rows with positions, written in one transaction. */
+// Budgets for disk-backed Chromium IndexedDB, about twice what the development
+// machine measured (in brackets), which writes 5,000–15,000 indexed rows a second.
+/** 300,000 Source rows with positions, written in one transaction [45 s]. */
 const CREATE_BUDGET_MS = 120_000;
-/** Positions, 3 keys pages and 30 answer pages into IndexedDB. */
-const DOWNLOAD_BUDGET_MS = 600_000;
-/** 600 requests, each acknowledged batch rebased. */
-const PUSH_BUDGET_MS = 1_800_000;
-/** A second device's pull of the cascade with its 300,000 graded rows. */
-const PULL_BUDGET_MS = 900_000;
-const FINISH_BUDGET_MS = 300_000;
+/** 3 keys pages and 30 answer pages into IndexedDB [74 s]. */
+const DOWNLOAD_BUDGET_MS = 180_000;
+/** 600 requests, each acknowledged batch rebased [425 s, before the in-memory server's own fix]. */
+const PUSH_BUDGET_MS = 900_000;
+/** The finish: 300,000 rows reset and a 150,000-question Level 2, then acknowledged [177 s]. */
+const FINISH_BUDGET_MS = 400_000;
 /** The drain's IndexedDB writes per operation it pushed. */
 const WRITES_PER_OP = 6;
 /** Overlay rows left once the outbox has drained. */
@@ -61,14 +59,18 @@ describe('a 300,000-question cascade on the device', () => {
 		expect(await d.countFor('cards', cascade)).toBe(QUESTIONS);
 		expect(downloadMs).toBeLessThanOrEqual(DOWNLOAD_BUDGET_MS);
 
-		// Every question graded here, half missed, then the outbox drained.
-		const [, gradeMs] = await timed(() => d.gradeAll(source, (p) => p % 2 === 1));
-		report('grading 300,000 cards locally', gradeMs, null, `${await d.count('outbox')} operations queued`);
+		// Every question graded here, half missed, then the outbox drained. The
+		// grades are queued in one transaction (what 300,000 applyLocally calls
+		// leave; testing/scale.test.ts): the budget is the drain, not the tapping.
+		const [, gradeMs] = await timed(() => d.queueGrades(source, (p) => p % 2 === 1));
+		report('queueing 300,000 grades (setup)', gradeMs, null, `${await d.count('outbox')} operations queued`);
 		expect(await d.count('outbox')).toBe(QUESTIONS);
 		const before = writes.n;
+		const serverBefore = d.serverMs;
 		const [requests, pushMs] = await timed(() => d.drain());
 		const drainWrites = writes.n - before;
-		report('push', pushMs, PUSH_BUDGET_MS, `${requests} requests, ${drainWrites} IndexedDB writes for ${QUESTIONS} operations`);
+		const serverMs = d.serverMs - serverBefore;
+		report('push', pushMs, PUSH_BUDGET_MS, `${requests} requests, ${drainWrites} IndexedDB writes for ${QUESTIONS} operations; ${(serverMs / 1000).toFixed(1)} s of it in the in-memory server`);
 		expect(requests).toBe(QUESTIONS / 500);
 		expect(drainWrites).toBeLessThanOrEqual(WRITES_PER_OP * QUESTIONS);
 		expect(pushMs).toBeLessThanOrEqual(PUSH_BUDGET_MS);
@@ -84,15 +86,6 @@ describe('a 300,000-question cascade on the device', () => {
 		report('stored', 0, null, `rows ${(rowBytes / 1e6).toFixed(1)} MB, keys ${(keyBytes / 1e6).toFixed(2)} MB, answers ${(answerBytes / 1e6).toFixed(1)} MB, overlay ${overlay} rows`);
 		expect(keyBytes).toBeGreaterThanOrEqual(KEY_BYTES_MIN);
 		expect(keyBytes).toBeLessThanOrEqual(KEY_BYTES_MAX);
-
-		// A second device pulls the cascade and its 300,000 graded rows.
-		const other = await ScaleDev.make(server, '44444444-4444-4444-8444-444444444444');
-		await other.open(cascade);
-		const [, pullMs] = await timed(() => other.engine.sync());
-		const graded = (await other.db.getAll('quiz_questions')).filter((r) => r.grade !== null).length;
-		report('pull', pullMs, PULL_BUDGET_MS, `${graded} graded rows in ${other.requests.length} requests`);
-		expect(graded).toBe(QUESTIONS);
-		expect(pullMs).toBeLessThanOrEqual(PULL_BUDGET_MS);
 
 		// Finish: the Source quiz descends; its 150,000 misses are Level 2.
 		const q = (await d.quiz(source))!;

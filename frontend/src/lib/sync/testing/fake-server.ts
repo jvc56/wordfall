@@ -27,6 +27,8 @@ interface QuizMeta {
 	options_seq: number;
 	options_device: string;
 	questions: Map<number, QMeta>;
+	/** Every grade as (seq, idx), in sequence order: an incremental pull reads only its recent end. */
+	log: [number, number][];
 }
 
 interface AttemptMeta {
@@ -212,7 +214,8 @@ export class FakeServer {
 					options_at: at,
 					options_seq: seq,
 					options_device: device,
-					questions: new Map()
+					questions: new Map(),
+					log: []
 				};
 				e.quizzes.set(q.id, m);
 			}
@@ -328,6 +331,7 @@ export class FakeServer {
 		const m = e.quizzes.get(w.quiz_id as string);
 		if (type === 'grade' && m) {
 			m.questions.set(w.question_idx as number, { graded_at: at, device, seq });
+			m.log.push([seq, w.question_idx as number]);
 			// A grade changes the quiz's counts, and studying stamps the cascade.
 			m.updated_seq = seq;
 			e.updated_seq = seq;
@@ -398,7 +402,15 @@ export class FakeServer {
 		for (const [e, q] of quizzes) {
 			if (!q.state.active || !t.qrf.includes(e.id)) continue;
 			const m = e.quizzes.get(q.id)!;
-			const rows = [...q.grades.entries()]
+			// An incremental pull looks only at the grades logged since its cursor
+			// (the scale suites' 600-request drains would otherwise rescan them all).
+			let candidates: Iterable<[number, Grade]> = q.grades.entries();
+			if (t.cur !== null) {
+				const recent = new Set<number>();
+				for (let i = m.log.length - 1; i >= 0 && m.log[i][0] > t.cur; i--) recent.add(m.log[i][1]);
+				candidates = [...recent].filter((idx) => q.grades.has(idx)).map((idx) => [idx, q.grades.get(idx)!] as [number, Grade]);
+			}
+			const rows = [...candidates]
 				.filter(([idx]) => m.questions.has(idx) && inRange(m.questions.get(idx)!.seq))
 				.sort((a, b) => a[0] - b[0]);
 			for (const [idx, g] of rows) {

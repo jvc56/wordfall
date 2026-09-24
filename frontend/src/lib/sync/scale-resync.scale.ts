@@ -11,7 +11,8 @@ import type { SyncResponse } from './protocol';
 import { FakeServer } from './testing/fake-server';
 import { ids, QUESTIONS, report, ScaleDev, ServerPlayer, timed } from './testing/scale';
 
-const RESYNC_BUDGET_MS = 300_000;
+/** About three times the 31 s measured on the development machine. */
+const RESYNC_BUDGET_MS = 90_000;
 const PAGE_ROWS = 50_000;
 const SEGMENTED = 20_000;
 const SEGMENT = 5;
@@ -64,7 +65,10 @@ describe('a resync of a device holding five 300,000-question cascades and 4,000 
 		expect(cleared).toBe(QUESTIONS / 2);
 
 		// The sixth runs its 4,000 segments, one miss each, every chain quiz cleared.
-		for (let r = 0; r < CHAINS; r++) {
+		// A quiz's last run ends with `finish`, never `finish_segment`, so the plan's
+		// "4,000 chain quizzes" from 20,000 questions in fives are 3,999 (PQ-011):
+		// the last run is left unfinished.
+		for (let r = 0; r < CHAINS - 1; r++) {
 			const chain = uuid('d', r);
 			other.grade(seg.cascade, seg.source, (p) => p === r * SEGMENT, r * SEGMENT, SEGMENT);
 			expect(other.finishSegment(seg.cascade, seg.source, (r + 1) * SEGMENT, BigInt(r + 1), chain).outcome).toBe('drilled');
@@ -73,7 +77,7 @@ describe('a resync of a device holding five 300,000-question cascades and 4,000 
 		}
 		await d.engine.sync();
 		const chains = (await d.db.getAllFromIndex('quizzes', 'cascade_id', seg.cascade)).filter((q) => q.status === 'cleared');
-		expect(chains.length).toBe(CHAINS);
+		expect(chains.length).toBe(CHAINS - 1);
 
 		// A purge the device never hears of, its tombstone pruned: the next sync is a resync.
 		other.raw('purge_quiz', { quiz_id: uuid('d', 0) });

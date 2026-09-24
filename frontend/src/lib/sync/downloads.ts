@@ -7,6 +7,7 @@
 // ROW_STORAGE_BUDGET in two tiers, evicts answers above the soft limit, and
 // yields to a page the player needs. A 429 pauses until Retry-After and the
 // same page is fetched again.
+import { deleteCascadeKeyed, deleteQuizKeyed } from '$lib/local/ranges';
 import { ApiError, api } from '$lib/api';
 import { questionsHash } from '$lib/cascade/order';
 import type { UserDb } from '$lib/local/db';
@@ -234,13 +235,12 @@ export class DownloadManager {
 	/** All rows here with positions, and none pending. */
 	private async complete(quiz: QuizRow): Promise<boolean> {
 		if (quiz.pending) return false;
+		// Positions are written for a quiz's whole set in one transaction, and the
+		// rebase marks a quiz pending when it removes single rows, so the row at
+		// the last position witnesses the set: one key lookup, where a count would
+		// walk every row of every active quiz on every pass.
 		const n = quiz.question_count;
-		const positioned = await this.db.countFromIndex(
-			'quiz_questions',
-			'quiz_position',
-			IDBKeyRange.bound([quiz.id, -Infinity], [quiz.id, Infinity])
-		);
-		return positioned === n;
+		return n > 0 && (await this.db.getKeyFromIndex('quiz_questions', 'quiz_position', [quiz.id, n - 1])) !== undefined;
 	}
 
 	/**
@@ -320,7 +320,7 @@ export class DownloadManager {
 				});
 			}
 			rows = withPositions(rows, row.shuffle_seed);
-			for (const r of rows) await store.put(r);
+			await Promise.all(rows.map((r) => store.put(r)));
 			const next = { ...row };
 			delete next.pending;
 			await tx.objectStore('quizzes').put(next);
@@ -351,10 +351,10 @@ export class DownloadManager {
 			await this.unit(async () => {
 				const tx = this.db.transaction(['questions', 'meta'], 'readwrite');
 				let bytes = 0;
-				for (let i = 0; i < p.keys.length; i++) {
-					bytes += p.keys[i].length * 2 + KEY_OVERHEAD;
-					await tx.objectStore('questions').put({ cascade_id: c.id, idx: p.from + i, key: p.keys[i] });
-				}
+				for (const k of p.keys) bytes += k.length * 2 + KEY_OVERHEAD;
+				// Issued together: IndexedDB pipelines a transaction's requests.
+				const store = tx.objectStore('questions');
+				await Promise.all(p.keys.map((key, i) => store.put({ cascade_id: c.id, idx: p.from + i, key })));
 				await addSize(tx as unknown as RwTx, c.id, bytes, 0);
 				await tx.done;
 			});
@@ -406,17 +406,25 @@ export class DownloadManager {
 				const tx = this.db.transaction(['cards', 'questions', 'meta'], 'readwrite');
 				let answerBytes = 0;
 				let keyBytes = 0;
-				for (const card of page) {
+				const cards = tx.objectStore('cards');
+				const questions = tx.objectStore('questions');
+				// The page's reads, then its writes, each issued together.
+				const [before, haveKey] = await Promise.all([
+					Promise.all(page.map((card) => cards.get([c.id, card.idx]))),
+					Promise.all(page.map((card) => questions.getKey([c.id, card.idx])))
+				]);
+				const writes: Promise<unknown>[] = [];
+				page.forEach((card, i) => {
 					const row: CardRow = { cascade_id: c.id, idx: card.idx, answer: card.answer, definitions, hooks };
-					const before = await tx.objectStore('cards').get([c.id, card.idx]);
-					if (before) answerBytes -= JSON.stringify(before.answer).length;
+					if (before[i]) answerBytes -= JSON.stringify(before[i]!.answer).length;
 					answerBytes += JSON.stringify(card.answer).length;
-					await tx.objectStore('cards').put(row);
-					if (!(await tx.objectStore('questions').getKey([c.id, card.idx]))) {
+					writes.push(cards.put(row));
+					if (!haveKey[i]) {
 						keyBytes += card.key.length * 2 + KEY_OVERHEAD;
-						await tx.objectStore('questions').put({ cascade_id: c.id, idx: card.idx, key: card.key });
+						writes.push(questions.put({ cascade_id: c.id, idx: card.idx, key: card.key }));
 					}
-				}
+				});
+				await Promise.all(writes);
 				await addSize(tx as unknown as RwTx, c.id, keyBytes, answerBytes);
 				await tx.done;
 			});
@@ -446,10 +454,9 @@ export class DownloadManager {
 	/** Drops everything the device can fetch or recompute again, keeping cascade, quiz and attempt rows. */
 	async dropCascade(cascadeId: string, budget: boolean) {
 		const tx = this.db.transaction(['quizzes', 'quiz_questions', 'questions', 'cards', 'meta'], 'readwrite');
-		for (const store of ['quiz_questions', 'questions', 'cards'] as const) {
-			const s = tx.objectStore(store);
-			for (const k of await s.index('cascade_id').getAllKeys(cascadeId)) await s.delete(k as never);
-		}
+		await deleteQuizKeyed(tx.objectStore('quiz_questions'), cascadeId);
+		await deleteCascadeKeyed(tx.objectStore('questions'), cascadeId);
+		await deleteCascadeKeyed(tx.objectStore('cards'), cascadeId);
 		for (const quiz of await tx.objectStore('quizzes').index('cascade_id').getAll(cascadeId)) {
 			// A played active quiz waits for its graded rows; an unplayed one needs only its list.
 			if (quiz.status === 'active' && quiz.correct_count + quiz.missed_count > 0) {
@@ -529,7 +536,7 @@ export class DownloadManager {
 		for (const id of candidates) {
 			if (total <= this.answerLimit && !(o.force && !evicted)) break;
 			const tx = this.db.transaction(['cards', 'meta'], 'readwrite');
-			for (const k of await tx.objectStore('cards').index('cascade_id').getAllKeys(id)) await tx.objectStore('cards').delete(k);
+			await deleteCascadeKeyed(tx.objectStore('cards'), id);
 			const s = await readMeta(tx as unknown as RwTx, 'sizes');
 			total -= s[id]?.answer_bytes ?? 0;
 			if (s[id]) s[id] = { ...s[id], answer_bytes: 0 };

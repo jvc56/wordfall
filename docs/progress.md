@@ -401,10 +401,31 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
   | purge a trashed 300k cascade, three levels, padded 1M | 0.45 s | 30 s |
   | 60,000 chains in 12 capped runs, sync answered each run | 0.3–1.8 s a run | 10 s |
   | incremental pull beside 60,000 chains (EXPLAIN: user_seq indexes, 3 buffers) | < 1 ms | 0.5 s |
-- Device scale suites `frontend/src/lib/sync/*.scale.ts`
-  (`vitest.scale.config.ts`; fake-indexeddb against the in-memory server, which
-  was made incremental so it scales): see "Device scale suites" below for what
-  ran on this machine.
+- Device scale suites `frontend/src/lib/sync/*.scale.ts`, run in a real
+  Chromium (Vitest browser mode, a persistent disk-backed profile;
+  `vitest.scale.config.ts`); fake-indexeddb in Node measured only itself.
+  Chromium's IndexedDB writes about 7,500 indexed rows a second on this
+  machine, which bounds every figure. Each file takes minutes, not hours:
+  | File | Wall clock | Measured (budget) |
+  |---|---|---|
+  | scale-one (300,000 questions) | ~12–14 min | creation 45 s (120), download 74 s (180), push 425 s (900; 600 requests, ~2 IndexedDB writes per op), finish 177 s (400); keys 3.2 MB |
+  | scale-keys (3 cascades, PQ-019) | 5 min | 9 keys requests vs 90, bytes ratio 0.179; pass 305 s (600) |
+  | scale-first-sync | 2 min | first sync 0.6 s (5); **sync after opening, 375,000 rows: 97 s against the plan-derived 12 s — fails** (PQ-019) |
+  | scale-resync | 7 min | resync 31 s (90), one page of 28,008 rows, 3,999 chains (PQ-011) |
+  | scale-drop (forty at a tenth, PQ-019) | 11 min | one cascade out of the window 31 s (120); forty: 6 dropped, 17 s (120) |
+  The setup builds starting states in bulk where the plan's state is "graded"
+  (`ScaleDev.queueGrades`, held to 300,000 `applyLocally` calls by
+  `testing/scale.test.ts`).
+- Profiling the device suites found real costs in the app, fixed:
+  - each acknowledged batch read the cascade's whole pending outbox and
+    scanned its whole overlay. The fix is an outbox `touches` index
+    (schema v2, backfilled) with clearing by key, pinned by an engine test.
+  - range `count()` calls, which Chromium answers by walking the range,
+    became `getKey` probes (a quiz's last-position row witnesses its set).
+  - single-key deletes of large sets became key-range deletes
+    (`lib/local/ranges.ts`).
+  - per-row sequential writes became pipelined.
+  The in-memory stand-in server was made incremental too.
 - Fixes the journeys found: bindings saved as a snapshot (a state proxy can't
   be cloned into IndexedDB); "Keep studying" dismissed in the controller; a
   deleted account lands on the landing page (`session.toLanding`); "Synced"
@@ -465,6 +486,7 @@ an AWS account, DNS or licensed data):
 - PQ-016 (expired-session journey TTL 20 s, not 2 s) — provisional.
 - PQ-017 (forty-cascade drop pass; ROW_BYTES 150; "only the kept one") — provisional.
 - PQ-018 (answer-limit journey vs "never its cards") — provisional.
+- PQ-019 (device scale cases at a tenth; the 120 s first-sync budget unmet) — **needs a decision**.
 
 ## Known failing tests
 

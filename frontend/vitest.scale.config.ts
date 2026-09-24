@@ -13,6 +13,10 @@ export default mergeConfig(
 		test: {
 			include: ['src/**/*.scale.ts'],
 			fileParallelism: false,
+			// Each suite reports its measurements with console.log, which the
+			// browser forwards only with this reporter.
+			silent: false,
+			reporters: ['verbose'],
 			testTimeout: 4 * 60 * 60 * 1000,
 			hookTimeout: 60 * 60 * 1000,
 			browser: {
