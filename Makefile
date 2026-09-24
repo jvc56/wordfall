@@ -50,11 +50,32 @@ test-integration:
 ## stack.up, stack.seed, Playwright, stack.down.
 test-e2e: frontend-deps
 	cd e2e && { [ -d node_modules ] || npm ci; } && npx playwright install chromium >/dev/null
-	npx playwright test
+	npx playwright test --grep-invert @env
+	# The journeys that need the stack configured differently, each on its own stack
+	# (PLAN.md § End-to-end tests: "through the same --env flag a developer would use").
+	E2E_PROJECT=wordfall-e2e-ttl E2E_PORT=5181 E2E_ENV='SESSION_TTL_SECONDS=20' E2E_TTL_WAIT_MS=25000 npx playwright test --grep @ttl
+	E2E_PROJECT=wordfall-e2e-purge E2E_PORT=5182 E2E_ENV='TRASH_RETENTION_DAYS=0 PURGE_INTERVAL_SECONDS=3' npx playwright test --grep @purge
+	E2E_PROJECT=wordfall-e2e-limits E2E_PORT=5183 E2E_ENV='MAX_SAVED_SEARCHES_PER_USER=2' E2E_SAVED_LIMIT=2 npx playwright test --grep @limits
+	# The storage journeys, on a frontend built with lowered client limits ("lowered with a test constant").
+	E2E_PROJECT=wordfall-e2e-answers E2E_PORT=5184 WORDFALL_TEST_LIMITS='{"AUTO_KEEP_OFFLINE_ROWS":30,"ANSWER_STORAGE_SOFT_LIMIT_BYTES":2000}' npx playwright test --grep @answers
+	E2E_PROJECT=wordfall-e2e-budget E2E_PORT=5185 WORDFALL_TEST_LIMITS='{"AUTO_KEEP_OFFLINE_ROWS":30,"ROW_STORAGE_BUDGET":5000}' npx playwright test --grep @budget
 
-## The 300,000-question budgets.
-test-scale:
-	python3 scripts/scale.py
+## The 300,000-question budgets (PLAN.md § Scale tests): the server's half
+## against a throwaway Postgres with production durability settings, in
+## release mode, one test at a time; then the device's half in Vitest.
+test-scale: frontend-deps
+	cid=$$(docker run -d --rm -e POSTGRES_PASSWORD=wordfall -p 127.0.0.1::5432 postgres:16 \
+	  -c max_connections=400 -c shared_buffers=512MB)
+	trap 'docker rm -f $$cid >/dev/null' EXIT
+	port=$$(docker port $$cid 5432/tcp | head -1 | sed 's/.*://')
+	for i in $$(seq 1 120); do
+	  docker exec $$cid pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break
+	  sleep 0.5
+	done
+	cd backend
+	DATABASE_URL=postgres://postgres:wordfall@127.0.0.1:$$port/postgres \
+	  cargo test --release --test scale -- --ignored --test-threads=1 --nocapture
+	cd ../frontend && npx vitest run --config vitest.scale.config.ts
 
 ## Zyzzyva comparison; skipped with a notice unless the licensed files are present.
 test-parity:

@@ -32,6 +32,7 @@ services:
       dockerfile: docker/frontend.Dockerfile
       args:
         APP_BUILD: ${WORDFALL_APP_BUILD:-0}
+        TEST_LIMITS: ${WORDFALL_TEST_LIMITS:-}
     ports:
       - "${WORDFALL_PORT:-5173}:80"
     depends_on:

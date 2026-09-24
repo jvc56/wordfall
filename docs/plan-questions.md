@@ -208,3 +208,62 @@ provisional choice made. Code affected is marked `// PQ-nnn`.
   client constant (`frontend/src/lib/cascades/summary.ts`, `CASCADE_LIMIT`),
   with the warning from 90, as PQ-010 does for the search rate. The server's
   `409` still refuses creation at its own configured limit.
+
+## PQ-016 — The expired-session journey's TTL (open)
+
+- **Plan:** End-to-end tests (5686–5688): "`SESSION_TTL_SECONDS=2` for the
+  expired-session journey".
+- **Issue:** The journey must create a cascade and let it download before it
+  goes offline, and every request in that setup needs a live session; with a
+  two-second TTL the session lapses during setup (the sliding renewal only
+  comes with a sync), so the journey cannot reach its offline part.
+- **Provisional choice:** the `@ttl` pass runs its stack with
+  `SESSION_TTL_SECONDS=20` and waits 25 s offline before reconnecting
+  (`Makefile`, `e2e/tests/env.spec.ts`). The journey's steps and assertions are
+  the plan's.
+
+## PQ-017 — The forty-cascade drop pass (open)
+
+- **Plan:** Scale tests (5972–5985): forty 300,000-question cascades inside
+  the window, all automatically kept; the pass "brings the base's rows and
+  keys under `ROW_STORAGE_BUDGET` … oldest last-open first", one marked Keep
+  offline "is the one cascade still whole at the end", and the next sync's
+  `question_rows_for` "names only the kept one". Downloads (2291–2296): the
+  pass drops "until the total is under the budget"; Local size (2247–2250):
+  "roughly 100–200 bytes per question per level".
+- **Issue:** Two things. (1) Whether forty cascades exceed 2 GB at all depends
+  on the per-row estimate: with about 56 bytes per measured English key, they
+  are over only when a row counts for more than about 123 bytes. The first
+  estimate, 120, left them under budget, so the pass had nothing to do.
+  (2) A pass that stops once under budget drops about six of the forty, not
+  thirty-nine. So "the one cascade still whole" and "names only the kept one"
+  contradict "until the total is under the budget".
+- **Provisional choice:**
+  - (1) `ROW_BYTES` is 150, the middle of the plan's range
+    (`frontend/src/lib/sync/downloads.ts`).
+  - (2) The pass keeps the plan's rule and stops once under budget. The scale
+    test (`frontend/src/lib/sync/scale-drop.scale.ts`) makes the
+    oldest-opened cascade the one kept by hand. It asserts that cascade is
+    still whole, and that the dropped cascades are exactly the next-oldest
+    ones, just enough to fit under the budget. It also asserts that the
+    sync's `question_rows_for` names exactly the cascades still holding rows,
+    the kept one among them.
+
+## PQ-018 — The answer-limit journey and the automatic keep (open)
+
+- **Plan:** End-to-end tests (5862–5866): "Over the answer limit with two
+  automatic keeps, see the Account page list both with their answer and key
+  sizes, turn one off, and see its answers freed on the next drop pass while
+  its questions still show in the player." Downloads (2204–2214): "never the
+  cards of a cascade the user marked Keep offline"; "An automatic keep by size
+  protects a cascade's rows from the window alone, never its cards".
+- **Issue:** An automatic keep never protects cards, so turning one off
+  changes nothing about eviction. Over the limit, the pass evicts the least
+  recently opened cascade's answers whether or not it is still kept.
+- **Provisional choice:** eviction follows the Downloads rule. The journey
+  (`e2e/tests/budget.spec.ts`) opens the first cascade before the second and
+  checks the Account page lists both with their answer and key sizes. It then
+  turns off the first one's keep and checks the first one's answers are gone
+  after the next pass while its keys stay. Its question still shows in the
+  player, it reads "Answers need a connection" offline, and it shows download
+  progress again online.

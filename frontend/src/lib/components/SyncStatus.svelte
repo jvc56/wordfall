@@ -17,6 +17,7 @@
 			case 'offline':
 				return 'Offline';
 			default:
+				if (syncState.pending === null) return 'Syncing…';
 				if (syncState.pending > 0) {
 					return syncState.pending === 1 ? '1 change waiting to sync' : `${syncState.pending} changes waiting to sync`;
 				}

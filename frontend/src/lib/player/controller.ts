@@ -239,6 +239,12 @@ export class Player {
 		}
 	}
 
+	/** "Keep studying": the completion screen closes and stays closed. */
+	dismissCompletion() {
+		this.v.completion = null;
+		this.emit();
+	}
+
 	/** After the user frees space: writes the action that waited. */
 	async retryStorage() {
 		const r = this.retry;
@@ -282,7 +288,7 @@ export class Player {
 		const start = q.run_start;
 		const end = this.runEnd(q);
 		let missing = 0;
-		for (let p = start; p < end; p++) if (!this.rows.get(this.order[p])?.grade && p !== this.v.card?.pos) missing++;
+		for (let p = start; p < end; p++) if (!this.rows.get(this.order[p])?.grade) missing++;
 		this.v.message = `Some questions in this run still need a connection (${Math.max(missing, 1)}).`;
 		this.emit();
 	}
@@ -428,14 +434,18 @@ export class Player {
 		return result;
 	}
 
-	/** A download landed: the current card takes the key or answer it lacked, keeping its state. */
+	/**
+	 * A download landed: the current card takes the key or answer it lacked, or
+	 * the answer refetched with the definitions or hooks a preference now asks
+	 * for, keeping its state.
+	 */
 	async refreshCard() {
 		const card = this.v.card;
-		if (!card || (card.key !== null && card.answer !== null)) return;
+		if (!card) return;
 		const key = (await this.db.get('questions', [this.cascadeId, card.idx]))?.key ?? null;
 		const answer = (await this.db.get('cards', [this.cascadeId, card.idx]))?.answer ?? null;
-		if (key === card.key && answer === card.answer) return;
 		if (card.key === null && key !== null) return this.loadCard(card.pos);
+		if (JSON.stringify(answer) === JSON.stringify(card.answer)) return;
 		this.v.card = { ...card, answer };
 		this.emit();
 	}

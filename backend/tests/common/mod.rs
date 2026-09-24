@@ -226,6 +226,27 @@ impl TestApp {
             .await
     }
 
+    /// A GET whose body is counted as it streams and never held, so a test can
+    /// measure what serving it costs the process (the scale test's exports).
+    pub fn stream_len(&self, path: &str) -> impl Future<Output = (StatusCode, usize)> + Send + 'static {
+        let router = self.router.clone();
+        let mut req = Request::get(path).body(Body::empty()).unwrap();
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 40000))));
+        async move {
+            let resp = router.oneshot(req).await.expect("router");
+            let status = resp.status();
+            let mut body = resp.into_body();
+            let mut n = 0;
+            while let Some(frame) = body.frame().await {
+                if let Ok(data) = frame.expect("body").into_data() {
+                    n += data.len();
+                }
+            }
+            (status, n)
+        }
+    }
+
     /// A fresh device with no cookies, from 203.0.113.1.
     pub fn client(&self) -> Client<'_> {
         Client::new(self, "203.0.113.1")

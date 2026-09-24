@@ -35,6 +35,10 @@ export async function policy(db: UserDb, now = new Date()): Promise<Policy> {
 			wanted.add(c.id);
 			continue;
 		}
+		// A budget drop is remembered: until it is opened again the cascade is
+		// treated as outside the window, automatic keep or not (§ Downloads),
+		// or the next pass would fetch back what this one dropped.
+		if (dropped.includes(c.id)) continue;
 		if (opens[c.id] && !optout.includes(c.id)) {
 			const active = (await tx.objectStore('quizzes').index('cascade_id').getAll(c.id))
 				.filter((q) => q.status === 'active')
@@ -46,7 +50,7 @@ export async function policy(db: UserDb, now = new Date()): Promise<Policy> {
 			}
 		}
 		const opened = opens[c.id];
-		if (opened && !dropped.includes(c.id) && now.getTime() - Date.parse(opened) < DOWNLOAD_WINDOW_DAYS * DAY_MS) {
+		if (opened && now.getTime() - Date.parse(opened) < DOWNLOAD_WINDOW_DAYS * DAY_MS) {
 			wanted.add(c.id);
 		}
 	}

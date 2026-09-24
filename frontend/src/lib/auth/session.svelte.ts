@@ -27,6 +27,8 @@ class Session {
 	/** The server no longer accepts this tab's session: "Log in to sync". */
 	needsLogin = $state(false);
 	me = $state<Me | null>(null);
+	/** Signing out on the way to the landing page (a deleted account), not to /login. */
+	toLanding = $state(false);
 }
 
 export const session = new Session();

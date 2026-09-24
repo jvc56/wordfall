@@ -6,6 +6,10 @@
 	$effect(() => {
 		if (session.userId) goto('/cascades', { replaceState: true });
 	});
+	// Arrived: the next sign-out goes to /login as usual.
+	$effect(() => {
+		if (session.toLanding) session.toLanding = false;
+	});
 </script>
 
 {#if !session.userId}

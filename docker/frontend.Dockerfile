@@ -9,7 +9,9 @@ COPY contract-fixtures/ /src/contract-fixtures/
 # The monotonic build number and git hash (PLAN.md § API → POST /api/sync).
 ARG APP_BUILD=0
 ARG APP_COMMIT=dev
-ENV WORDFALL_BUILD=$APP_BUILD WORDFALL_COMMIT=$APP_COMMIT
+# Lowered storage limits for the end-to-end budget journeys only; empty in a release.
+ARG TEST_LIMITS=""
+ENV WORDFALL_BUILD=$APP_BUILD WORDFALL_COMMIT=$APP_COMMIT WORDFALL_TEST_LIMITS=$TEST_LIMITS
 RUN npm run build
 
 FROM nginx:1.27-alpine

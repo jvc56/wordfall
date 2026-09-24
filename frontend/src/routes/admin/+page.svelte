@@ -67,7 +67,7 @@
 	function lexiconBlocker(l: Item): string | null {
 		const parts = [];
 		if (l.has_leave_set) parts.push('it has leave values');
-		if (l.cascade_count) parts.push(`${l.cascade_count} cascade${l.cascade_count === 1 ? '' : 's'} use it`);
+		if (l.cascade_count) parts.push(l.cascade_count === 1 ? '1 cascade uses it' : `${l.cascade_count} cascades use it`);
 		return parts.length ? `In use: ${parts.join(' and ')}.` : null;
 	}
 </script>
@@ -123,6 +123,7 @@
 										>
 											Delete
 										</Button>
+										{#if d.lexicon_count}<p class="mt-1 text-xs text-muted-foreground">In use: lexicons refer to it.</p>{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -166,6 +167,7 @@
 										>
 											Delete
 										</Button>
+										{#if blocker}<p class="mt-1 text-xs text-muted-foreground">{blocker}</p>{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}
@@ -206,6 +208,7 @@
 										>
 											Delete
 										</Button>
+										{#if s.cascade_count}<p class="mt-1 text-xs text-muted-foreground">In use: Leave Value cascades refer to it.</p>{/if}
 									</Table.Cell>
 								</Table.Row>
 							{/each}

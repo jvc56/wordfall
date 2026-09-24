@@ -40,7 +40,8 @@
 	}
 
 	async function save(next: Binding[]) {
-		await applyLocally(db, { type: 'set_bindings', bindings: next });
+		// A plain copy: the bindings come from reactive state, which IndexedDB cannot clone.
+		await applyLocally(db, { type: 'set_bindings', bindings: $state.snapshot(next) });
 		afterLocalWrite();
 		onchange();
 	}

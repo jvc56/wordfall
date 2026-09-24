@@ -244,7 +244,7 @@
 			</label>
 		{/if}
 		<p class="text-sm" role="status">
-			{#if count !== null}{count} questions{#if entries !== null && choices.format === 'txt' && choices.lines === 'answers'} · {entries} words{/if}{:else}Counting needs this cascade’s questions on this device.{/if}
+			{#if count !== null}{`${count} questions${entries !== null && choices.format === 'txt' && choices.lines === 'answers' ? ` · ${entries} words` : ''}`}{:else}Counting needs this cascade’s questions on this device.{/if}
 		</p>
 		<div class="flex gap-2">
 			<Button onclick={exportNow} disabled={busy || (choices.format === 'csv' && choices.columns.length === 0)}>{busy ? 'Exporting…' : 'Export'}</Button>

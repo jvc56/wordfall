@@ -246,7 +246,7 @@
 	}
 
 	function keepStudying() {
-		if (v) v = { ...v, completion: null };
+		player?.dismissCompletion();
 	}
 </script>
 

@@ -26,6 +26,26 @@ test('the service worker serves the shell offline', async ({ page, context }) =>
 	// A reload so the page is controlled.
 	await page.reload();
 	await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+	// The index.html the worker serves carries the build's <meta> policy: script-src
+	// holds 'self' and a hash, never 'unsafe-inline'; an injected inline script is refused.
+	const html = await page.evaluate(async () => (await (await caches.match('/index.html'))?.text()) ?? '');
+	const policy = /<meta http-equiv="content-security-policy" content="([^"]+)"/i.exec(html)?.[1] ?? '';
+	const scriptSrc = policy.split(';').find((d) => d.trim().startsWith('script-src')) ?? '';
+	expect(scriptSrc).toContain("'self'");
+	expect(scriptSrc).toMatch(/'sha256-[^']+'/);
+	expect(scriptSrc).not.toContain('unsafe-inline');
+	const refused = await page.evaluate(
+		() =>
+			new Promise<boolean>((resolve) => {
+				document.addEventListener('securitypolicyviolation', () => resolve(true), { once: true });
+				const s = document.createElement('script');
+				s.textContent = 'window.__injected = true';
+				document.body.appendChild(s);
+				setTimeout(() => resolve(false), 1000);
+			})
+	);
+	expect(refused).toBe(true);
+	expect(await page.evaluate(() => (window as unknown as { __injected?: boolean }).__injected)).toBeUndefined();
 	await context.setOffline(true);
 	await page.goto('/login');
 	await expect(page.getByLabel('Username')).toBeVisible();

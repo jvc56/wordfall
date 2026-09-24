@@ -37,6 +37,11 @@
 	$effect(() => {
 		if (!session.ready) return;
 		const path = page.url.pathname;
+		// A deleted account lands on the landing page, not the login page.
+		if (!session.userId && session.toLanding) {
+			if (path !== '/') goto('/', { replaceState: true });
+			return;
+		}
 		if (!session.userId && !PUBLIC.includes(path)) goto('/login', { replaceState: true });
 	});
 </script>

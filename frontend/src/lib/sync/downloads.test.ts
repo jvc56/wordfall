@@ -11,7 +11,7 @@ import { openUserDb, type UserDb } from '$lib/local/db';
 import { getMeta, initMeta, recordOpen, writeMeta } from '$lib/local/meta';
 import * as view from '$lib/local/view';
 import type { RwTx } from '$lib/local/view';
-import { DownloadManager, type DownloadApi } from './downloads';
+import { DownloadManager, ROW_BYTES, type DownloadApi } from './downloads';
 import { SyncEngine } from './engine';
 import { setKeepOffline } from './keep';
 import { policy } from './policy';
@@ -343,7 +343,7 @@ describe('the download manager', () => {
 		await b.open(C2);
 		await b.sync();
 		// A budget that holds one cascade's rows and keys, not two.
-		(b.dl as unknown as { rowBudget: number }).rowBudget = 50 * 120 + 50 * 60;
+		(b.dl as unknown as { rowBudget: number }).rowBudget = 50 * ROW_BYTES + 50 * 60;
 		await b.dl.run();
 		expect(await b.count('quiz_questions', C1)).toBe(0);
 		expect(await b.count('quiz_questions', C2)).toBe(50);
@@ -379,6 +379,27 @@ describe('the download manager', () => {
 		expect(await b.count('quiz_questions', C1)).toBe(0);
 		expect(await b.count('quiz_questions', C3)).toBe(20);
 		expect(r.overByUserKept).toBe(true);
+	});
+
+	// PLAN.md § Downloads: "A budget drop is remembered, or it would undo itself" —
+	// for an automatically kept cascade too, until it is opened again.
+	it('a budget-dropped cascade kept automatically by size is neither wanted nor kept until it is opened', async () => {
+		const server = new FakeServer();
+		server.create({ id: C1, source_id: Q1, count: 60_000 });
+		const b = await Dev.make(server);
+		await b.engine.sync();
+		await b.open(C1);
+		let pol = await policy(b.db, new Date(b.now));
+		expect(pol.autoKept.has(C1)).toBe(true);
+		await b.db.put('meta', [C1], 'budget_dropped');
+		pol = await policy(b.db, new Date(b.now));
+		expect(pol.wanted.has(C1)).toBe(false);
+		expect(pol.autoKept.has(C1)).toBe(false);
+		// Opening it clears the mark: kept automatically again.
+		await b.open(C1);
+		pol = await policy(b.db, new Date(b.now));
+		expect(await getMeta(b.db, 'budget_dropped')).toEqual([]);
+		expect(pol.autoKept.has(C1) && pol.wanted.has(C1)).toBe(true);
 	});
 
 	it('the drop pass skips a cascade with pending operations or an open player', async () => {

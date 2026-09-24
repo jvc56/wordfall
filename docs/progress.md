@@ -4,8 +4,19 @@ Resume from this file plus `docs/plan-index.md`. PLAN.md is the spec.
 
 ## Current
 
-- **Phase:** 7h — e2e journeys and scale tests (next to start)
+- **Phase:** 7h — e2e journeys and scale tests (in progress)
 - **Last green checkpoint:** Phase 7g — export
+- **7h status:** journeys written in `e2e/tests/` (support.ts helpers:
+  newUser via console-log code, createCascade, apiCascade, playLevel, idb,
+  outboxCount): rules ✅, two-devices ✅, touch ✅, player ✅, pages ✅,
+  shell ✅; being fixed: accounts, admin, controls, misc, plane, segments,
+  typed, tabs, journeys. Configured passes (`@env` tags, own stacks via
+  E2E_PROJECT/E2E_PORT/E2E_ENV in the Makefile): `@ttl` (PQ-016), `@purge`,
+  `@limits` in `env.spec.ts` — not yet run. Not yet written: updating the app
+  (second build, MIN_APP_VERSION), the 10,001-entry preview pause, the answer
+  limit / ROW_STORAGE_BUDGET journeys (need lowered client constants), export
+  with the backend stopped mid-download, CSP meta-policy checks. Scale tests
+  (`scripts/scale.py`) still a placeholder.
 
 ## Environment notes (this machine)
 

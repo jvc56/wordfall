@@ -32,7 +32,9 @@ export default defineConfig({
 	// compared against MIN_APP_VERSION, and its git hash, logged but deciding nothing.
 	define: {
 		__APP_BUILD__: JSON.stringify(Number(process.env.WORDFALL_BUILD ?? 0)),
-		__APP_COMMIT__: JSON.stringify(process.env.WORDFALL_COMMIT ?? 'dev')
+		__APP_COMMIT__: JSON.stringify(process.env.WORDFALL_COMMIT ?? 'dev'),
+		// The end-to-end budget journeys' lowered storage limits, as JSON; unset in a release.
+		__TEST_LIMITS__: process.env.WORDFALL_TEST_LIMITS || 'null'
 	},
 	// default-src 'self' blocks data: URIs, so no asset is inlined as one.
 	build: { assetsInlineLimit: 0 },

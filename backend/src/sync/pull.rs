@@ -120,6 +120,33 @@ pub struct Changes {
     pub tombstones: Vec<Tombstone>,
 }
 
+/// The cascade rows of a page: `$1` user, `$2`..`$3` the sequence range,
+/// `$4` the last id sent, `$5` the limit. Public so the scale test can
+/// `EXPLAIN` the query the pull runs.
+pub fn cascades_sql() -> String {
+    format!(
+        "{} WHERE c.user_id = $1 AND c.updated_seq > $2 AND c.updated_seq <= $3 AND c.id > $4
+         ORDER BY c.id LIMIT $5",
+        rows::CASCADE_SELECT
+    )
+}
+
+/// The quiz rows of a page, bound as [`cascades_sql`].
+pub fn quizzes_sql() -> String {
+    format!(
+        "{} WHERE q.user_id = $1 AND q.updated_seq > $2 AND q.updated_seq <= $3 AND q.id > $4
+         ORDER BY q.id LIMIT $5",
+        rows::QUIZ_SELECT
+    )
+}
+
+/// The attempt rows of a page: `$4`, `$5` the last (quiz, attempt) sent, `$6` the limit.
+pub const ATTEMPTS_SQL: &str = "SELECT quiz_id, attempt, question_count, correct_count, missed_count, outcome, shuffle_seed,
+        finished_at, updated_seq
+ FROM quiz_attempts
+ WHERE user_id = $1 AND updated_seq > $2 AND updated_seq <= $3 AND (quiz_id, attempt) > ($4, $5)
+ ORDER BY quiz_id, attempt LIMIT $6";
+
 /// One page from `start`. Returns the changes and the token for the next
 /// page, if the page filled.
 pub async fn page(conn: &mut PgConnection, start: &PageToken) -> Result<(Changes, Option<PageToken>), sqlx::Error> {
@@ -135,11 +162,7 @@ pub async fn page(conn: &mut PgConnection, start: &PageToken) -> Result<(Changes
         match table {
             0 => {
                 let last = after.first().and_then(|s| s.parse::<Uuid>().ok()).unwrap_or(Uuid::nil());
-                let mut rows: Vec<CascadeRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-                    "{} WHERE c.user_id = $1 AND c.updated_seq > $2 AND c.updated_seq <= $3 AND c.id > $4
-                     ORDER BY c.id LIMIT $5",
-                    rows::CASCADE_SELECT
-                )))
+                let mut rows: Vec<CascadeRow> = sqlx::query_as(sqlx::AssertSqlSafe(cascades_sql()))
                 .bind(user)
                 .bind(floor)
                 .bind(ceil)
@@ -158,11 +181,7 @@ pub async fn page(conn: &mut PgConnection, start: &PageToken) -> Result<(Changes
             }
             1 => {
                 let last = after.first().and_then(|s| s.parse::<Uuid>().ok()).unwrap_or(Uuid::nil());
-                let mut rows: Vec<QuizRow> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-                    "{} WHERE q.user_id = $1 AND q.updated_seq > $2 AND q.updated_seq <= $3 AND q.id > $4
-                     ORDER BY q.id LIMIT $5",
-                    rows::QUIZ_SELECT
-                )))
+                let mut rows: Vec<QuizRow> = sqlx::query_as(sqlx::AssertSqlSafe(quizzes_sql()))
                 .bind(user)
                 .bind(floor)
                 .bind(ceil)
@@ -182,13 +201,7 @@ pub async fn page(conn: &mut PgConnection, start: &PageToken) -> Result<(Changes
             2 => {
                 let last_quiz = after.first().and_then(|s| s.parse::<Uuid>().ok()).unwrap_or(Uuid::nil());
                 let last_attempt: i32 = after.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-                let mut rows: Vec<AttemptRow> = sqlx::query_as(
-                    "SELECT quiz_id, attempt, question_count, correct_count, missed_count, outcome, shuffle_seed,
-                            finished_at, updated_seq
-                     FROM quiz_attempts
-                     WHERE user_id = $1 AND updated_seq > $2 AND updated_seq <= $3 AND (quiz_id, attempt) > ($4, $5)
-                     ORDER BY quiz_id, attempt LIMIT $6",
-                )
+                let mut rows: Vec<AttemptRow> = sqlx::query_as(ATTEMPTS_SQL)
                 .bind(user)
                 .bind(floor)
                 .bind(ceil)

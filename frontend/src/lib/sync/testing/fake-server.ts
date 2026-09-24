@@ -6,7 +6,7 @@
 // (PLAN.md § The sync cycle). The server itself is tested in backend/tests.
 import { questionsHash, toI64, fromI64 } from '$lib/cascade/order';
 import { Rejected, type Grade, type Progression } from '$lib/cascade/rules';
-import { SimCascade, type Op, type SimQuiz } from '$lib/cascade/sim';
+import { positionsOf, SimCascade, type Op, type SimQuiz } from '$lib/cascade/sim';
 import type { QuestionGroup, Reply, SyncRequest, SyncResult, Tombstone, WireRow } from '../protocol';
 
 interface QMeta {
@@ -188,13 +188,16 @@ export class FakeServer {
 	}
 
 	/** Stamps every row an operation changed with `seq`. */
-	private track(e: CascadeEntry, seq: number, at: string, device: string) {
+	private track(e: CascadeEntry, seq: number, at: string, device: string, only?: string) {
 		const snap = JSON.stringify({ ...e.sim.state, t: e.trashed_at });
 		if (snap !== e.snapshot) {
 			e.snapshot = snap;
 			e.updated_seq = seq;
 		}
-		for (const q of e.sim.quizzes.values()) {
+		// A grade or a cursor move changes its own quiz alone; checking every quiz
+		// would cost the scale suite's 4,000-chain cascade 4,000 comparisons per grade.
+		const quizzes = only && e.sim.quizzes.size === e.quizzes.size ? [e.sim.quizzes.get(only)!].filter(Boolean) : e.sim.quizzes.values();
+		for (const q of quizzes) {
 			this.quizCascade.set(q.id, e.id);
 			let m = e.quizzes.get(q.id);
 			if (!m) {
@@ -213,7 +216,9 @@ export class FakeServer {
 				};
 				e.quizzes.set(q.id, m);
 			}
-			const qsnap = JSON.stringify({ ...q.state, seed: q.state.seed.toString(), g: [...q.grades] });
+			// The grade count, not the grades: a regrade is stamped by applyOp, and
+			// serialising 300,000 grades per operation would make the scale suite quadratic.
+			const qsnap = JSON.stringify({ ...q.state, seed: q.state.seed.toString(), g: q.grades.size });
 			if (qsnap !== m.snapshot) {
 				if (m.snapshot && !q.state.active && m.cleared_at === null) m.cleared_at = at;
 				if (q.state.active) m.cleared_at = null;
@@ -223,7 +228,7 @@ export class FakeServer {
 				e.updated_seq = seq;
 			}
 			// Question rows: a reset clears them all; a grade stamps its own.
-			for (const idx of [...m.questions.keys()]) if (!q.grades.has(idx)) m.questions.delete(idx);
+			if (m.questions.size > q.grades.size) for (const idx of [...m.questions.keys()]) if (!q.grades.has(idx)) m.questions.delete(idx);
 		}
 	}
 
@@ -319,9 +324,14 @@ export class FakeServer {
 			e.options_seq = seq;
 			e.options_device = device;
 		}
-		this.track(e, seq, at, device);
+		this.track(e, seq, at, device, type === 'grade' || type === 'move_cursor' ? (w.quiz_id as string) : undefined);
 		const m = e.quizzes.get(w.quiz_id as string);
-		if (type === 'grade' && m) m.questions.set(w.question_idx as number, { graded_at: at, device, seq });
+		if (type === 'grade' && m) {
+			m.questions.set(w.question_idx as number, { graded_at: at, device, seq });
+			// A grade changes the quiz's counts, and studying stamps the cascade.
+			m.updated_seq = seq;
+			e.updated_seq = seq;
+		}
 		if (type === 'move_cursor' && m) Object.assign(m, { cursor_at: at, cursor_device: device, cursor_seq: seq });
 		if (type === 'set_quiz_options' && m) Object.assign(m, { options_at: at, options_seq: seq, options_device: device });
 		if (type === 'purge_quiz') {
@@ -356,7 +366,17 @@ export class FakeServer {
 	// Pull
 	// -------------------------------------------------------------------------
 
+	/** A pull's rows, built by its first page and reused by the rest (the ceiling is fixed). */
+	private pull: { key: string; items: { table: string; row: WireRow; n: number }[] } | null = null;
+
 	private page(t: { cur: number | null; ceil: number; qrf: string[]; after: number }) {
+		const key = JSON.stringify({ ...t, after: 0 });
+		if (t.after === 0 || this.pull?.key !== key) this.pull = { key, items: this.items(t) };
+		const items = this.pull.items;
+		return this.slice(t, items);
+	}
+
+	private items(t: { cur: number | null; ceil: number; qrf: string[] }) {
 		const inRange = (s: number) => (t.cur === null || s > t.cur) && s <= t.ceil;
 		type Item = { table: string; row: WireRow; n: number };
 		const items: Item[] = [];
@@ -392,6 +412,10 @@ export class FakeServer {
 				if (inRange(tb.seqn)) items.push({ table: 'tombstones', row: { entity: tb.entity, entity_id: tb.entity_id, seq: tb.seq }, n: 1 });
 			}
 		}
+		return items;
+	}
+
+	private slice(t: { cur: number | null; ceil: number; qrf: string[]; after: number }, items: { table: string; row: WireRow; n: number }[]) {
 		const slice = items.slice(t.after, t.after + this.pageRows);
 		const changes = {
 			cascades: [] as WireRow[],
@@ -485,6 +509,15 @@ export class FakeServer {
 			key,
 			answer: [{ word: `WORD${from + i}`, ...(hooks ? { front_hooks: 'S' } : {}), ...(definitions ? { definition: 'a word' } : {}) }]
 		}));
+	}
+
+	/** A quiz's question order, for a test playing it as another device. */
+	positions(cascadeId: string, quizId: string): number[] {
+		return positionsOf(this.cascades.get(cascadeId)!.sim.quizzes.get(quizId)!);
+	}
+
+	quizState(cascadeId: string, quizId: string) {
+		return this.cascades.get(cascadeId)!.sim.quizzes.get(quizId)!.state;
 	}
 
 	/** Prunes every tombstone, raising the floor to the highest removed. */

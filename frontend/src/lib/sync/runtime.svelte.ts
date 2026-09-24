@@ -19,8 +19,8 @@ class SyncState {
 	/** The cascade this tab's player has open (the drop pass skips it). */
 	openCascade = $state<string | null>(null);
 	overBudgetByUserKept = $state(false);
-	/** Operations waiting in the outbox. */
-	pending = $state(0);
+	/** Operations waiting in the outbox; null until counted, so "Synced" is never shown unread. */
+	pending = $state<number | null>(null);
 	/** Cascades a rebase changed: a player showing one refreshes (step 5). */
 	changed = $state<{ ids: string[]; tick: number }>({ ids: [], tick: 0 });
 }
@@ -70,13 +70,18 @@ function post(m: Message) {
 export function startSync(userId: string): () => void {
 	stopSync();
 	currentUser = userId;
+	syncState.pending = null;
 	void refreshPending();
 	if (typeof BroadcastChannel !== 'undefined') {
 		channel = new BroadcastChannel(`wordfall-sync-${userId}`);
 		channel.onmessage = (ev) => {
 			const m = ev.data as Message;
 			if (m.kind === 'kick') engine?.schedule();
-			else if (m.kind === 'status' && !syncState.leader) syncState.status = m.status;
+			else if (m.kind === 'status' && !syncState.leader) {
+				// The leader's sync may have sent this tab's operations too.
+				syncState.status = m.status;
+				void refreshPending();
+			}
 			else if (m.kind === 'notices' && !syncState.leader) syncState.notices = [...syncState.notices, ...m.notices];
 			else if (m.kind === 'changed') syncState.changed = { ids: m.ids, tick: syncState.changed.tick + 1 };
 			else if (m.kind === 'progress') syncState.progress += 1;
@@ -99,7 +104,11 @@ export function startSync(userId: string): () => void {
 					}
 					void downloads
 						?.run()
-						.then(() => post({ kind: 'progress' }))
+						.then(() => {
+							// A finished pass changes badges here and in every other tab.
+							syncState.progress += 1;
+							post({ kind: 'progress' });
+						})
 						.catch(() => undefined);
 				},
 				onStatus: (s) => {

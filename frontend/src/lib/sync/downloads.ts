@@ -22,8 +22,12 @@ import { withPositions } from './rebase';
 export const INDEX_PAGE = 50_000;
 export const KEYS_PAGE = 100_000;
 export const CARDS_PAGE = 10_000;
-/** Bytes a base question row with its position costs, for the budget. */
-export const ROW_BYTES = 120;
+/**
+ * Bytes a base question row with its position costs, for the budget: the
+ * middle of PLAN.md's "roughly 100–200 bytes per question per level", which
+ * puts forty 300,000-question cascades over ROW_STORAGE_BUDGET (PQ-017).
+ */
+export const ROW_BYTES = 150; // PQ-017
 /** Bytes a key costs beyond its characters. */
 export const KEY_OVERHEAD = 40;
 

@@ -32,6 +32,8 @@
 	let list = $state<CascadeSummary[]>([]);
 	let count = $state(0);
 	let opens = $state<Record<string, string>>({});
+	/** Budget-dropped cascades: "kept automatically once opened" until they are opened again. */
+	let dropped = $state<string[]>([]);
 	let maxQuiz = $state(300_000);
 	let editing = $state<{ id: string; count: number; options: QuizOptions } | null>(null);
 	let error = $state<string | null>(null);
@@ -43,6 +45,7 @@
 		list = await cascadeSummaries(db, online);
 		count = (await allCascades(db)).length;
 		opens = await getMeta(db, 'opens');
+		dropped = await getMeta(db, 'budget_dropped');
 	}
 
 	onMount(() => {
@@ -152,7 +155,7 @@
 	{/if}
 	<ul class="space-y-4">
 		{#each list as s (s.cascade.id)}
-			{@const hint = keepHint(s, !!opens[s.cascade.id])}
+			{@const hint = keepHint(s, !!opens[s.cascade.id] && !dropped.includes(s.cascade.id))}
 			<li class="rounded-lg border p-4">
 				<div class="flex flex-wrap items-baseline justify-between gap-2">
 					<a class="text-lg font-medium underline-offset-2 hover:underline" href={`/cascades/${s.cascade.id}`}>{s.cascade.name}</a>

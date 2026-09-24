@@ -110,6 +110,8 @@
 		// The session is already void: remove this device's copy, with no queued logout.
 		closeUserDb();
 		if (id) await removeAccountData(id);
+		// To the landing page; the signed-out guard would otherwise send this page to /login.
+		session.toLanding = true;
 		forgetSession();
 		await goto('/', { replaceState: true });
 	}
@@ -144,7 +146,7 @@
 				<Checkbox id="remove-data" bind:checked={removeData} />
 				<Label for="remove-data">Remove this account's data from this device</Label>
 			</div>
-			{#if syncState.pending > 0}
+			{#if (syncState.pending ?? 0) > 0}
 				<p class="text-sm" role="status">
 					{syncState.pending === 1 ? '1 change hasn’t' : `${syncState.pending} changes haven’t`} synced yet. {syncState.pending === 1 ? 'It' : 'They'}
 					will sync the next time you log in on this device.

@@ -200,7 +200,8 @@
 			if (e instanceof ApiError && e.code === 'name_taken') {
 				if (confirm(`Replace your saved search "${saveName}"?`)) await save(true, id);
 			} else if (e instanceof ApiError && e.code === 'saved_search_limit') {
-				saveMessage = `You have ${(e.body as { limit: number }).limit} saved searches, the most you can keep. Delete one first.`;
+				const b = e.body as { limit: number; count: number };
+				saveMessage = `You have ${b.count} of ${b.limit} saved searches, the most you can keep. Delete one first.`;
 			} else if (e instanceof ApiError && e.status === 400) {
 				saveMessage = (e.body as { errors?: { message: string }[] })?.errors?.map((x) => x.message).join(' ') ?? 'Invalid.';
 			} else saveMessage = 'The search could not be saved.';

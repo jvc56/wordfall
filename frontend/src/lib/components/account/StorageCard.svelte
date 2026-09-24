@@ -33,7 +33,8 @@
 	let kept = $state<Kept[]>([]);
 	let total = $state(0);
 
-	const mb = (b: number) => `${(b / 1_048_576).toFixed(1)} MB`;
+	// KB below a megabyte, so a small device's figures don't all read 0.0 MB.
+	const mb = (b: number) => (b < 1_048_576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1_048_576).toFixed(1)} MB`);
 
 	async function refresh() {
 		accounts = await storageLine();

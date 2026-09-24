@@ -26,7 +26,17 @@ function post(to: ServiceWorker | null | undefined, m: ToWorker) {
 export async function watchUpdates() {
 	if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
 	const sw = navigator.serviceWorker;
+	// The build this page runs, for support and for the update journey's check.
+	document.documentElement.dataset.build = String(typeof __APP_BUILD__ === 'number' ? __APP_BUILD__ : 0);
 	registration = (await sw.getRegistration()) ?? null;
+	// A card can stay open for hours with no navigation to prompt the browser's
+	// own check, so look for a new version now and then, and on returning.
+	const lookForUpdate = () => void registration?.update().catch(() => undefined);
+	setInterval(lookForUpdate, 5 * 60_000);
+	addEventListener('online', lookForUpdate);
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') lookForUpdate();
+	});
 	post(sw.controller, { type: 'HELLO', version });
 	addEventListener('pagehide', () => post(sw.controller, { type: 'CLOSING', version }));
 	sw.addEventListener('controllerchange', () => {
